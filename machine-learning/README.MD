@@ -1,0 +1,5 @@
+- Dirigirse a carpeta /machine-learning
+- ejecutar python -m venv venv
+- Activar el venv
+- venv\Scripts\activate (windows)
+- pip install -r requirementes.ml.txt
