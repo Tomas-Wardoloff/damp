@@ -1,185 +1,240 @@
 """
 DAMP - Distributed Animal Monitoring Platform
-Generador de datos sintéticos v2
+Generador de datos sintéticos — versión final con progresión temporal
 
-Esquema: el dispositivo IoT procesa en el edge cada 5 minutos
-y sube un registro con el promedio/resumen del intervalo.
+Biología implementada (Khatun 2017, Fogsgaard 2012):
+  Hora 0:     bacteria ingresa al cuarto
+  Hora 0-12:  fase subclínica silenciosa — temp sube apenas
+  Hora 12-24: fase subclínica manifiesta — temp +0.8C, rumia cae
+  Hora 24-48: fase clínica — fiebre clara, animal comprometido
 
-Columnas finales:
-  label, timestamp, animal_id,
-  temperatura_corporal_prom,
-  hubo_rumia,
-  frec_cardiaca_prom,
-  rmssd,
-  sdnn,
-  hubo_vocalizacion,
-  latitud, longitud,
-  metros_recorridos,
+Columnas generadas:
+  label               — fase en ese registro (sana/subclinica/clinica)
+  label_animal        — clase final del animal
+  timestamp
+  animal_id
+  progresion          — factor 0-1 de avance de la enfermedad
+  temperatura_corporal_prom
+  hubo_rumia
+  frec_cardiaca_prom
+  rmssd
+  sdnn
+  hubo_vocalizacion
+  latitud / longitud
+  metros_recorridos
   velocidad_movimiento_prom
 
-Referencia biológica:
-  Hogeveen et al. (2011), Khatun et al. (2017),
-  Fogsgaard et al. (2012)
+Uso:
+  python damp_generator_final.py
+  → genera damp_data_temporal.csv en la misma carpeta
 """
 
 import numpy as np
 import pandas as pd
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
 
 np.random.seed(42)
 
 # ─────────────────────────────────────────────
 # CONFIGURACIÓN
 # ─────────────────────────────────────────────
-N_DIAS          = 3          # 3 días de simulación
-INTERVALO_MIN   = 5          # resumen cada 5 minutos
-N_REGISTROS     = (N_DIAS * 24 * 60) // INTERVALO_MIN   # 864 por animal
+N_DIAS      = 3
+IVMIN       = 5       # intervalo en minutos
+NR          = (N_DIAS * 24 * 60) // IVMIN   # 864 registros por animal
 
 RODEO = {
-    "sana":       list(range(1, 15)),   # BOV_001 – BOV_014
-    "subclinica": list(range(15, 18)),  # BOV_015 – BOV_017
-    "clinica":    list(range(18, 21)),  # BOV_018 – BOV_020
+    # 14 sanas: sin infección, solo ruido fisiológico normal
+    "sana":       {"ids": list(range(1, 15)),  "infectados": False},
+    # 3 subclínicas: se infectan en el día 1 — progresan hasta fase subclinica
+    "subclinica": {"ids": list(range(15, 18)), "infectados": True, "inicio": 100, "max_prog": 0.55},
+    # 3 clínicas: se infectan en el día 0 — progresan a clínica plena
+    "clinica":    {"ids": list(range(18, 21)), "infectados": True, "inicio": 24,  "max_prog": 1.0},
 }
 
 # ─────────────────────────────────────────────
-# PARÁMETROS BIOLÓGICOS POR ESTADO
+# PARÁMETROS BASE — animal completamente sano
+# Referencia: Radostits et al. (2007), Khatun et al. (2017)
 # ─────────────────────────────────────────────
-PARAMS = {
-    "sana": {
-        "temp_media":        38.6,   "temp_std":        0.30,
-        "hr_media":          65.0,   "hr_std":          5.0,
-        "rmssd_media":       42.0,   "rmssd_std":       7.0,
-        "velocidad_media":   1.8,    "velocidad_std":   0.6,   # km/h pastoreo normal
-        "prob_rumia":        0.55,   # ~55% de los intervalos hay rumia
-        "prob_vocal":        0.06,   # vocaliza poco
-    },
-    "subclinica": {
-        "temp_media":        39.2,   "temp_std":        0.40,
-        "hr_media":          78.0,   "hr_std":          7.0,
-        "rmssd_media":       27.0,   "rmssd_std":       6.0,
-        "velocidad_media":   1.1,    "velocidad_std":   0.5,
-        "prob_rumia":        0.35,   # rumia cae — indicador temprano
-        "prob_vocal":        0.18,
-    },
-    "clinica": {
-        "temp_media":        40.4,   "temp_std":        0.50,
-        "hr_media":          92.0,   "hr_std":          9.0,
-        "rmssd_media":       14.0,   "rmssd_std":       4.0,
-        "velocidad_media":   0.4,    "velocidad_std":   0.2,
-        "prob_rumia":        0.10,   # casi no rumia
-        "prob_vocal":        0.30,
-    },
+BASE = {
+    "temp":     38.6,  "temp_s":    0.45,
+    "hr":       65.0,  "hr_s":      7.0,
+    "rmssd":    40.0,  "rmssd_s":   9.0,
+    "vel":       1.7,  "vel_s":     0.70,
+    "p_rumia":  0.52,
+    "p_vocal":  0.07,
 }
+
+# Delta máximo al llegar a mastitis clínica plena
+# Referencia: Fogsgaard et al. (2012), Hogeveen et al. (2011)
+DELTA_CLINICA = {
+    "temp":    +1.8,    # fiebre: +1.8°C
+    "hr":      +26.0,   # taquicardia: +26 bpm
+    "rmssd":   -26.0,   # HRV cae: -26 ms
+    "vel":      -1.3,   # movimiento cae: -1.3 km/h
+    "p_rumia": -0.42,   # rumia cae de 0.52 a 0.10
+    "p_vocal": +0.22,   # vocalización sube de 0.07 a 0.29
+}
+
+# ─────────────────────────────────────────────
+# FUNCIÓN DE PROGRESIÓN — curva sigmoide
+# Simula la naturaleza gradual de la mastitis:
+# lenta al inicio, rápida en el punto de inflexión (24hs),
+# se estabiliza al llegar a estado clínico
+# ─────────────────────────────────────────────
+def progresion_mastitis(i, hora_inicio_infeccion):
+    horas = (i - hora_inicio_infeccion) * IVMIN / 60.0
+    if horas <= 0:
+        return 0.0
+    return float(1 / (1 + np.exp(-0.2 * (horas - 24))))
+
+def fase(prog):
+    if prog < 0.15:
+        return "sana"
+    if prog < 0.60:
+        return "subclinica"
+    return "clinica"
 
 # ─────────────────────────────────────────────
 # RITMO CIRCADIANO
-# Vacas tienen dos picos de actividad: 6-8am y 16-18pm
+# Dos picos de actividad: 6-8am y 16-18pm
 # ─────────────────────────────────────────────
-def factor_circadiano(hora_decimal):
-    manana = np.exp(-0.5 * ((hora_decimal - 7.0) / 1.5) ** 2)
-    tarde  = np.exp(-0.5 * ((hora_decimal - 17.0) / 1.5) ** 2)
-    return 0.55 + 0.45 * (manana + tarde)
+def factor_circadiano(hora):
+    m = np.exp(-0.5 * ((hora - 7.0) / 1.5) ** 2)
+    t = np.exp(-0.5 * ((hora - 17.0) / 1.5) ** 2)
+    return 0.55 + 0.45 * (m + t)
+
+# ─────────────────────────────────────────────
+# EVENTOS PUNTUALES (2.5% de los registros)
+# Simulan sustos, calor extremo, interacciones sociales
+# ─────────────────────────────────────────────
+def hay_evento(i, animal_id):
+    state = np.random.get_state()
+    np.random.seed(animal_id * 1000 + i)
+    resultado = np.random.random() < 0.025
+    np.random.set_state(state)
+    return resultado
 
 # ─────────────────────────────────────────────
 # GENERADOR POR ANIMAL
 # ─────────────────────────────────────────────
-def generar_animal(animal_id, estado):
-    p   = PARAMS[estado]
-    t0  = datetime(2025, 6, 1, 6, 0, 0)
-
-    # Posición base en la pampa húmeda
+def generar_animal(aid, estado, cfg):
     lat0 = -34.6037 + np.random.uniform(-0.08, 0.08)
     lon0 = -60.9265 + np.random.uniform(-0.08, 0.08)
     lat, lon = lat0, lon0
+    radio = 0.010 if estado == "sana" else 0.006
 
-    # Radio máximo de desplazamiento según estado
-    radio = {"sana": 0.010, "subclinica": 0.005, "clinica": 0.002}[estado]
+    # Inicio de infección con variabilidad entre animales
+    if cfg["infectados"]:
+        inicio_inf = cfg["inicio"] + np.random.randint(-20, 20)
+    else:
+        inicio_inf = NR + 1   # nunca se infecta
 
-    registros = []
+    t0 = datetime(2025, 6, 1, 6, 0, 0)
+    rows = []
 
-    for i in range(N_REGISTROS):
-        ts   = t0 + timedelta(minutes=i * INTERVALO_MIN)
-        hora = ts.hour + ts.minute / 60.0
-        circ = factor_circadiano(hora)
+    for i in range(NR):
+        ts  = t0 + timedelta(minutes=i * IVMIN)
+        h   = ts.hour + ts.minute / 60.0
+        c   = factor_circadiano(h)
+        rc  = np.random.normal(0, 1)   # ruido correlacionado entre sensores
+        ev  = hay_evento(i, aid)
+
+        # Factor de progresión — el corazón del modelo
+        prog = min(
+            progresion_mastitis(i, inicio_inf),
+            cfg.get("max_prog", 1.0)
+        )
+        label_i = fase(prog)
+
+        # Valores interpolados entre base y estado clínico según progresión
+        temp_m  = BASE["temp"]    + prog * DELTA_CLINICA["temp"]
+        hr_m    = BASE["hr"]      + prog * DELTA_CLINICA["hr"]
+        rmssd_m = BASE["rmssd"]   + prog * DELTA_CLINICA["rmssd"]
+        vel_m   = BASE["vel"]     + prog * DELTA_CLINICA["vel"]
+        p_rum   = BASE["p_rumia"] + prog * DELTA_CLINICA["p_rumia"]
+        p_voc   = BASE["p_vocal"] + prog * DELTA_CLINICA["p_vocal"]
+
+        # Std aumenta con la enfermedad — más variabilidad fisiológica bajo estrés
+        temp_s  = BASE["temp_s"]  * (1 + 0.4 * prog)
+        hr_s    = BASE["hr_s"]    * (1 + 0.5 * prog)
+        rmssd_s = BASE["rmssd_s"] * (1 + 0.3 * prog)
+        vel_s   = BASE["vel_s"]   * (1 + 0.3 * prog)
 
         # ── Temperatura ──────────────────────────────────
-        # Deriva suave que representa progresión de la enfermedad
-        progresion = i / N_REGISTROS
-        temp_media_ajustada = p["temp_media"] + (0.4 * progresion if estado != "sana" else 0)
-        # Variación circadiana fisiológica (+0.2°C al atardecer)
-        temp_circ = 0.1 * np.sin(2 * np.pi * (hora - 6) / 24)
-        temp = round(np.clip(
-            np.random.normal(temp_media_ajustada, p["temp_std"]) + temp_circ,
+        temp = round(float(np.clip(
+            np.random.normal(temp_m, temp_s)
+            + 0.1 * np.sin(2 * np.pi * (h - 6) / 24)  # variación circadiana
+            + rc * 0.08
+            + (np.random.uniform(0.1, 0.4) if ev else 0),
             36.5, 42.5
-        ), 2)
+        )), 2)
 
         # ── Frecuencia cardíaca ──────────────────────────
-        hr = round(np.clip(
-            np.random.normal(p["hr_media"], p["hr_std"]),
-            40.0, 130.0
-        ), 1)
+        hr = round(float(np.clip(
+            np.random.normal(hr_m, hr_s)
+            + rc * 1.8
+            + (np.random.uniform(2, 7) if ev else 0),
+            38, 130
+        )), 1)
 
         # ── HRV ─────────────────────────────────────────
-        rmssd = round(max(5.0, np.random.normal(p["rmssd_media"], p["rmssd_std"])), 1)
-        # SDNN siempre un poco mayor que RMSSD (relación fisiológica)
-        sdnn  = round(max(rmssd * 1.05, rmssd * np.random.uniform(1.1, 1.5)), 1)
+        rmssd = round(float(max(4.0,
+            np.random.normal(max(5.0, rmssd_m), rmssd_s) - rc * 1.0
+        )), 1)
+        sdnn = round(float(max(rmssd * 1.05, rmssd * np.random.uniform(1.1, 1.45))), 1)
 
         # ── Rumia ────────────────────────────────────────
-        # Sube con el factor circadiano (rumiación post-pastoreo)
-        # El IoT la detecta por el patrón rítmico del acelerómetro + giroscopio
-        prob_rumia_ajustada = p["prob_rumia"] * (0.7 + 0.6 * circ)
-        hubo_rumia = int(np.random.random() < min(prob_rumia_ajustada, 1.0))
+        prob_rum = min(max(0, p_rum) * (0.7 + 0.6 * c) * (0.2 if ev else 1), 1.0)
+        hubo_rumia = int(np.random.random() < prob_rum)
 
         # ── Vocalización ─────────────────────────────────
-        hubo_vocalizacion = int(np.random.random() < p["prob_vocal"])
+        hubo_vocal = int(np.random.random() < min(p_voc + (0.1 if ev else 0), 1.0))
 
         # ── Movimiento / GPS ─────────────────────────────
-        velocidad = round(max(0.0,
-            np.random.normal(p["velocidad_media"] * circ, p["velocidad_std"])
-        ), 2)   # km/h
+        vel = round(float(max(0.0,
+            np.random.normal(max(0.0, vel_m) * c, vel_s) * (0.3 if ev else 1)
+        )), 2)
+        metros = round(vel * (IVMIN / 60) * 1000, 1)
 
-        # metros recorridos en el intervalo de 5 minutos
-        metros = round(velocidad * (INTERVALO_MIN / 60) * 1000, 1)
+        paso = (vel / 3600) * IVMIN * 60 / 111320
+        lat = float(np.clip(lat + np.random.normal(0, paso * 0.5), lat0 - radio, lat0 + radio))
+        lon = float(np.clip(lon + np.random.normal(0, paso * 0.5), lon0 - radio, lon0 + radio))
 
-        # Random walk GPS proporcional al movimiento
-        paso = (velocidad / 3600) * INTERVALO_MIN * 60 / 111320  # grados
-        lat += np.random.normal(0, paso * 0.5)
-        lon += np.random.normal(0, paso * 0.5)
-        lat = float(np.clip(lat, lat0 - radio, lat0 + radio))
-        lon = float(np.clip(lon, lon0 - radio, lon0 + radio))
-
-        registros.append({
-            "label":                      estado,
+        rows.append({
+            "label":                      label_i,
+            "label_animal":               estado,
             "timestamp":                  ts.strftime("%Y-%m-%d %H:%M:%S"),
-            "animal_id":                  f"BOV_{animal_id:03d}",
+            "animal_id":                  f"BOV_{aid:03d}",
+            "progresion":                 round(prog, 4),
             "temperatura_corporal_prom":  temp,
             "hubo_rumia":                 hubo_rumia,
             "frec_cardiaca_prom":         hr,
             "rmssd":                      rmssd,
             "sdnn":                       sdnn,
-            "hubo_vocalizacion":          hubo_vocalizacion,
+            "hubo_vocalizacion":          hubo_vocal,
             "latitud":                    round(lat, 6),
             "longitud":                   round(lon, 6),
             "metros_recorridos":          metros,
-            "velocidad_movimiento_prom":  velocidad,
+            "velocidad_movimiento_prom":  vel,
         })
 
-    return registros
+    return rows
 
 # ─────────────────────────────────────────────
 # GENERAR EL DATASET COMPLETO
 # ─────────────────────────────────────────────
-print("DAMP — Generando dataset v2")
-print(f"  {N_DIAS} días · intervalo {INTERVALO_MIN} min · {N_REGISTROS} registros/animal")
-print()
+print("DAMP — Generador final con progresión temporal")
+print(f"  {N_DIAS} días · intervalo {IVMIN} min · {NR} registros/animal")
+print(f"  Progresión: sigmoide 48hs (Khatun 2017, Fogsgaard 2012)\n")
 
 todos = []
-for estado, ids in RODEO.items():
-    for aid in ids:
-        filas = generar_animal(aid, estado)
+for estado, cfg in RODEO.items():
+    for aid in cfg["ids"]:
+        filas = generar_animal(aid, estado, cfg)
         todos.extend(filas)
-        print(f"  ✓ BOV_{aid:03d}  [{estado:>10}]  {len(filas)} registros")
+        infectado = f"infección en registro ~{cfg.get('inicio','—')}" if cfg["infectados"] else "sin infección"
+        print(f"  ✓ BOV_{aid:03d}  [{estado:>10}]  {len(filas)} registros  ({infectado})")
 
 df = pd.DataFrame(todos)
 
@@ -187,29 +242,40 @@ df = pd.DataFrame(todos)
 # VALIDACIÓN
 # ─────────────────────────────────────────────
 print(f"\nShape: {df.shape[0]:,} filas × {df.shape[1]} columnas")
-print(f"Columnas: {list(df.columns)}\n")
 
-print("── Promedios por estado ─────────────────────────────")
-cols_check = [
-    "temperatura_corporal_prom", "frec_cardiaca_prom",
-    "rmssd", "sdnn", "metros_recorridos", "velocidad_movimiento_prom"
+print("\n── Progresión de BOV_018 (clínica) — muestra cada 2hs ──")
+bov18 = df[df.animal_id == "BOV_018"][
+    ["timestamp", "progresion", "label",
+     "temperatura_corporal_prom", "frec_cardiaca_prom", "rmssd"]
 ]
-resumen = df.groupby("label")[cols_check].mean().round(2)
-print(resumen.to_string())
+print(bov18.iloc[::24].head(20).to_string(index=False))
 
-print("\n── Proporciones binarias ────────────────────────────")
-for col in ["hubo_rumia", "hubo_vocalizacion"]:
-    prop = df.groupby("label")[col].mean().mul(100).round(1)
-    print(f"\n{col} (% de intervalos):")
-    print(prop.to_string())
+print("\n── Distribución de labels dinámicos ─────────────────")
+print(df.groupby(["label_animal", "label"]).size().to_string())
+
+print("\n── Promedios por label dinámico ──────────────────────")
+cols = ["temperatura_corporal_prom", "frec_cardiaca_prom", "rmssd", "metros_recorridos"]
+print(df.groupby("label")[cols].mean().round(2).to_string())
 
 # ─────────────────────────────────────────────
 # GUARDAR
 # ─────────────────────────────────────────────
-output_dir = Path(__file__).resolve().parent
-df.to_csv(output_dir / "damp_data.csv", index=False)
-df.sample(100, random_state=42).sort_values("timestamp").to_csv(
-    output_dir / "damp_sample.csv", index=False
-)
-print("\n✓ damp_data.csv guardado")
-print("✓ damp_sample.csv guardado (100 filas)")
+out = Path(__file__).resolve().parent
+path_full   = out / "damp_data_temporal.csv"
+path_sample = out / "damp_sample_temporal.csv"
+
+df.to_csv(path_full, index=False)
+df.sample(200, random_state=42).sort_values("timestamp").to_csv(path_sample, index=False)
+
+# BOV_018 es clínica — tiene la progresión más completa
+# sana → subclinica → clinica en 48hs, ideal para testear el modelo
+path_test = out / "damp_data_test.csv"
+vaca_test = df[df.animal_id == "BOV_018"].copy()
+vaca_test.to_csv(path_test, index=False)
+
+print(f"\n✓ Dataset completo  → {path_full}")
+print(f"✓ Muestra 200 filas → {path_sample}")
+print(f"✓ Test una vaca     → {path_test}")
+print(f"  (BOV_018, clínica, {len(vaca_test)} registros)")
+print(f"  labels: {vaca_test['label'].value_counts().to_dict()}")
+print(f"\nColumnas: {list(df.columns)}")
