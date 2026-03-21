@@ -20,6 +20,8 @@ class HealthSchedulerConfigResponse(BaseModel):
     cycle_minutes: int
     updated_at: datetime
 
+    model_config = {"from_attributes": True}
+
 
 class HealthSchedulerConfigUpdate(BaseModel):
     enabled: bool

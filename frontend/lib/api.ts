@@ -76,7 +76,7 @@ export async function getLatestReadings(): Promise<any[]> {
 
 export async function getHealthSchedulerConfig(): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/health/scheduler/config`, {
+    const res = await fetch(`/api/health/scheduler/config`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
@@ -92,7 +92,7 @@ export async function updateHealthSchedulerConfig(payload: {
   cycle_minutes: number;
 }): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/health/scheduler/config`, {
+    const res = await fetch(`/api/health/scheduler/config`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -109,7 +109,7 @@ export async function updateHealthSchedulerConfig(payload: {
 
 export async function getHealthSchedulerRuntime(): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/health/scheduler/runtime`, {
+    const res = await fetch(`/api/health/scheduler/runtime`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
