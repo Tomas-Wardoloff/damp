@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Activity, Clock3, MapPin } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { getLatestHealthByHistory, getLatestReadings, parseApiDateMs } from "@/lib/api";
+import { fetchDashboardData, parseApiDateMs } from "@/lib/api";
 import type { HerdMapPoint } from "@/components/dashboard/HerdGeoMapClient";
 
 const HerdGeoMapClient = dynamic(
@@ -80,118 +80,37 @@ export default function MapaRodeoPage() {
 
   const loadMapData = useCallback(async () => {
     try {
-      const latestReadings = await getLatestReadings();
+      const data = await fetchDashboardData();
+      const animals = data.animals;
+
       const nowMs = Date.now();
 
-      const validReadings = latestReadings.filter((reading) => {
-        const lat = toNumber(reading?.latitud);
-        const lng = toNumber(reading?.longitud);
-        const ts = parseApiDateMs(reading?.timestamp);
-        return lat !== null && lng !== null && ts !== null && ts <= nowMs;
-      });
-
-      const uniqueCowIds = Array.from(
-        new Set(validReadings.map((reading) => Number(reading.cow_id)).filter(Boolean)),
-      );
-
-      const healthMap = new Map<
-        number,
-        {
-          effectiveStatus: string | null;
-          effectiveConfidence: number | null;
-          primaryStatus: string | null;
-          primaryConfidence: number | null;
-          secondaryStatus: string | null;
-          secondaryConfidence: number | null;
-          createdAt: string | null;
-        }
-      >();
-      const chunkSize = 8;
-
-      for (let i = 0; i < uniqueCowIds.length; i += chunkSize) {
-        const chunk = uniqueCowIds.slice(i, i + chunkSize);
-        const chunkResults = await Promise.all(
-          chunk.map(async (cowId) => {
-            const latestHealth = await getLatestHealthByHistory(cowId);
-            const primaryStatus = latestHealth?.primary_status || latestHealth?.status || null;
-            const primaryConfidence =
-              typeof latestHealth?.primary_confidence === "number"
-                ? latestHealth.primary_confidence
-                : typeof latestHealth?.confidence === "number"
-                  ? latestHealth.confidence
-                  : null;
-            const secondaryStatus = latestHealth?.secondary_status || null;
-            const secondaryConfidence =
-              typeof latestHealth?.secondary_confidence === "number"
-                ? latestHealth.secondary_confidence
-                : null;
-
-            let effectiveStatus = primaryStatus;
-            let effectiveConfidence = primaryConfidence;
-            if (
-              secondaryStatus &&
-              secondaryConfidence !== null &&
-              (primaryConfidence === null || secondaryConfidence > primaryConfidence)
-            ) {
-              effectiveStatus = secondaryStatus;
-              effectiveConfidence = secondaryConfidence;
-            }
-
-            const normalizedStatus = normalizeDisplayedStatus(effectiveStatus);
-
-            return {
-              cowId,
-              effectiveStatus: normalizedStatus,
-              effectiveConfidence,
-              primaryStatus,
-              primaryConfidence,
-              secondaryStatus,
-              secondaryConfidence,
-              createdAt: latestHealth?.created_at || null,
-            };
-          }),
-        );
-
-        chunkResults.forEach((item) => {
-          healthMap.set(item.cowId, {
-            effectiveStatus: item.effectiveStatus,
-            effectiveConfidence: item.effectiveConfidence,
-            primaryStatus: item.primaryStatus,
-            primaryConfidence: item.primaryConfidence,
-            secondaryStatus: item.secondaryStatus,
-            secondaryConfidence: item.secondaryConfidence,
-            createdAt: item.createdAt,
-          });
-        });
-      }
-
-      const mappedPoints: HerdMapPoint[] = validReadings
-        .map((reading) => {
-          const cowId = Number(reading.cow_id);
-          const lat = toNumber(reading.latitud);
-          const lng = toNumber(reading.longitud);
-
-          if (!Number.isFinite(cowId) || lat === null || lng === null) {
-            return null;
-          }
-
-          const health = healthMap.get(cowId);
+      const mappedPoints: HerdMapPoint[] = animals
+        .filter((a: any) => {
+          const lat = toNumber(a.latitud);
+          const lng = toNumber(a.longitud);
+          // Note: fetchDashboardData already formats lastUpdated, but for the map we might want raw TS comparison if possible.
+          // However, for this MVP, if it's in the summary, it's the latest.
+          return lat !== null && lng !== null;
+        })
+        .map((a: any) => {
+          const status = a.status?.toUpperCase() || "SANA";
+          const normalizedStatus = normalizeDisplayedStatus(status);
 
           return {
-            cowId,
-            lat,
-            lng,
-            timestamp: String(reading.timestamp),
-            healthStatus: health?.effectiveStatus || null,
-            confidence: health?.effectiveConfidence ?? null,
-            healthCreatedAt: health?.createdAt ?? null,
-            primaryStatus: health?.primaryStatus ?? null,
-            primaryConfidence: health?.primaryConfidence ?? null,
-            secondaryStatus: health?.secondaryStatus ?? null,
-            secondaryConfidence: health?.secondaryConfidence ?? null,
+            cowId: Number(a.id),
+            lat: Number(a.latitud),
+            lng: Number(a.longitud),
+            timestamp: a.lastUpdated,
+            healthStatus: normalizedStatus,
+            confidence: null, // Summary currently doesn't provide confidence
+            healthCreatedAt: a.lastUpdated,
+            primaryStatus: status,
+            primaryConfidence: null,
+            secondaryStatus: null,
+            secondaryConfidence: null,
           };
-        })
-        .filter((point): point is HerdMapPoint => point !== null);
+        });
 
       setPoints(mappedPoints);
       setLastFetchTime(new Date());

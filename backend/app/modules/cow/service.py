@@ -86,6 +86,8 @@ class CowService:
                     "distance": round(reading.metros_recorridos)
                     if reading and reading.metros_recorridos
                     else "--",
+                    "latitud": reading.latitud if reading else None,
+                    "longitud": reading.longitud if reading else None,
                     "lastUpdated": reading.timestamp.isoformat() if reading else "N/A",
                 }
             )

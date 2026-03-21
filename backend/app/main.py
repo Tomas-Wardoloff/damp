@@ -25,8 +25,9 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    import asyncio
     if settings.auto_create_tables:
-        Base.metadata.create_all(bind=engine)
+        await asyncio.to_thread(Base.metadata.create_all, engine)
     await app.state.health_scheduler.start()
 
 

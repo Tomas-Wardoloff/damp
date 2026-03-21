@@ -25,6 +25,8 @@ class CowSummaryItem(BaseModel):
     temperature: float | str
     heartRate: float | str
     distance: float | str
+    latitud: float | str | None = None
+    longitud: float | str | None = None
     lastUpdated: str
 
 
