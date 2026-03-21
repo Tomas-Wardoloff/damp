@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+import re
 
 from fastapi import HTTPException, status
 import httpx
@@ -127,17 +128,49 @@ class HealthService:
         )
         return list(self.db.scalars(stmt).all())
 
-    def clinical_history(self, days: int) -> tuple[datetime, datetime, list[dict]]:
+    @staticmethod
+    def _parse_cow_code(cow_code: str | None) -> int | None:
+        if cow_code is None:
+            return None
+
+        trimmed = cow_code.strip()
+        if not trimmed:
+            return None
+
+        match = re.search(r"(\d+)", trimmed)
+        if not match:
+            return -1
+
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return -1
+
+    def clinical_history(
+        self,
+        days: int,
+        page: int,
+        size: int,
+        cow_code: str | None = None,
+    ) -> tuple[datetime, datetime, list[dict], int, int]:
         to_date = datetime.utcnow()
         from_date = to_date - timedelta(days=days)
 
-        stmt = (
-            select(HealthAnalysis)
-            .where(
-                HealthAnalysis.created_at >= from_date,
-                HealthAnalysis.created_at <= to_date,
-            )
-            .order_by(HealthAnalysis.cow_id.asc(), HealthAnalysis.created_at.asc())
+        parsed_cow_id = self._parse_cow_code(cow_code)
+        if parsed_cow_id == -1:
+            return from_date, to_date, [], 0, 0
+
+        where_conditions = [
+            HealthAnalysis.created_at >= from_date,
+            HealthAnalysis.created_at <= to_date,
+        ]
+        if parsed_cow_id is not None:
+            where_conditions.append(HealthAnalysis.cow_id == parsed_cow_id)
+
+        stmt = select(HealthAnalysis).where(*where_conditions).order_by(
+            HealthAnalysis.cow_id.asc(),
+            HealthAnalysis.created_at.asc(),
+            HealthAnalysis.id.asc(),
         )
         analyses = list(self.db.scalars(stmt).all())
 
@@ -176,7 +209,13 @@ class HealthService:
                 }
             )
 
-        return from_date, to_date, cows
+        total_cows = len(cows)
+        total_pages = (total_cows + size - 1) // size if total_cows > 0 else 0
+        start = (page - 1) * size
+        end = start + size
+        paginated_cows = cows[start:end]
+
+        return from_date, to_date, paginated_cows, total_cows, total_pages
 
     @staticmethod
     def _serialize_reading(reading: Reading) -> dict:

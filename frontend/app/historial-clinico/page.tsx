@@ -33,6 +33,13 @@ type ClinicalHistoryResponse = {
   days: number;
   from_date: string;
   to_date: string;
+  page: number;
+  size: number;
+  total_cows: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+  cow_code: string | null;
   cows: CowHistory[];
 };
 
@@ -80,7 +87,11 @@ function statusColor(status: string): string {
 }
 
 export default function HistorialClinicoPage() {
+  const PAGE_SIZE = 3;
   const [days, setDays] = useState(7);
+  const [page, setPage] = useState(1);
+  const [cowCodeInput, setCowCodeInput] = useState("");
+  const [cowCode, setCowCode] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<ClinicalHistoryResponse | null>(null);
 
@@ -89,8 +100,17 @@ export default function HistorialClinicoPage() {
 
     async function load() {
       setIsLoading(true);
-      const response = await getClinicalHistory(days);
+      const response = await getClinicalHistory({
+        days,
+        page,
+        size: PAGE_SIZE,
+        cowCode,
+      });
       if (isMounted) {
+        if (response && response.total_pages > 0 && page > response.total_pages) {
+          setPage(response.total_pages);
+          return;
+        }
         setData(response as ClinicalHistoryResponse | null);
         setIsLoading(false);
       }
@@ -100,7 +120,7 @@ export default function HistorialClinicoPage() {
     return () => {
       isMounted = false;
     };
-  }, [days]);
+  }, [days, page, cowCode]);
 
   const cows = useMemo(() => {
     if (!data?.cows) return [];
@@ -125,7 +145,10 @@ export default function HistorialClinicoPage() {
               <button
                 key={value}
                 type="button"
-                onClick={() => setDays(value)}
+                onClick={() => {
+                  setDays(value);
+                  setPage(1);
+                }}
                 className={
                   value === days
                     ? "rounded-md border border-primary bg-primary/20 px-3 py-1.5 text-sm font-semibold text-primary"
@@ -138,13 +161,59 @@ export default function HistorialClinicoPage() {
           </div>
         </section>
 
+        <section className="glass-panel rounded-xl border border-outline-variant/30 p-4 flex flex-wrap items-end gap-3 justify-between">
+          <div>
+            <p className="text-body-md font-semibold">Filtro por código</p>
+            <p className="text-label-sm text-on-surface-variant">
+              Buscá una vaca por código (ej: 7, 007, Vaca #7).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={cowCodeInput}
+              onChange={(event) => setCowCodeInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  setCowCode(cowCodeInput.trim());
+                  setPage(1);
+                }
+              }}
+              placeholder="Código de vaca"
+              className="w-48 rounded-md border border-outline-variant/40 bg-surface-container px-3 py-2 text-sm text-on-surface"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setCowCode(cowCodeInput.trim());
+                setPage(1);
+              }}
+              className="rounded-md border border-primary bg-primary/20 px-3 py-2 text-sm font-semibold text-primary"
+            >
+              Filtrar
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCowCodeInput("");
+                setCowCode("");
+                setPage(1);
+              }}
+              className="rounded-md border border-outline-variant/30 bg-surface-container px-3 py-2 text-sm text-on-surface-variant"
+            >
+              Limpiar
+            </button>
+          </div>
+        </section>
+
         {isLoading ? (
           <div className="rounded-xl border border-outline-variant/30 p-8 text-center text-on-surface-variant">
             Cargando historial clínico...
           </div>
         ) : cows.length === 0 ? (
           <div className="rounded-xl border border-outline-variant/30 p-8 text-center text-on-surface-variant">
-            No hay vacas con historial clínico en el rango seleccionado.
+            No hay vacas con historial clínico para los filtros seleccionados.
           </div>
         ) : (
           <section className="space-y-4">
@@ -237,6 +306,30 @@ export default function HistorialClinicoPage() {
                 </article>
               );
             })}
+
+            <div className="glass-panel rounded-xl border border-outline-variant/30 p-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-label-sm text-on-surface-variant">
+                Página {data?.page ?? page} de {data?.total_pages ?? 0} | {data?.total_cows ?? 0} vacas
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={!data?.has_prev}
+                  className="rounded-md border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-sm text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => prev + 1)}
+                  disabled={!data?.has_next}
+                  className="rounded-md border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-sm text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
           </section>
         )}
       </div>

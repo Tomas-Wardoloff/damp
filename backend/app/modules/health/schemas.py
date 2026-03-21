@@ -65,4 +65,11 @@ class ClinicalHistoryResponse(BaseModel):
     days: int
     from_date: datetime
     to_date: datetime
+    page: int
+    size: int
+    total_cows: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+    cow_code: str | None = None
     cows: list[CowClinicalHistoryResponse]

@@ -197,10 +197,22 @@ export async function getHealthHistory(
   }
 }
 
-export async function getClinicalHistory(days = 7): Promise<{
+export async function getClinicalHistory(params?: {
+  days?: number;
+  page?: number;
+  size?: number;
+  cowCode?: string;
+}): Promise<{
   days: number;
   from_date: string;
   to_date: string;
+  page: number;
+  size: number;
+  total_cows: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+  cow_code: string | null;
   cows: Array<{
     cow_id: number;
     total_points: number;
@@ -219,9 +231,27 @@ export async function getClinicalHistory(days = 7): Promise<{
   }>;
 } | null> {
   try {
-    const safeDays = Number.isFinite(days) ? Math.max(1, Math.min(30, Math.floor(days))) : 7;
+    const safeDays = Number.isFinite(params?.days)
+      ? Math.max(1, Math.min(30, Math.floor(params!.days!)))
+      : 7;
+    const safePage = Number.isFinite(params?.page)
+      ? Math.max(1, Math.floor(params!.page!))
+      : 1;
+    const safeSize = Number.isFinite(params?.size)
+      ? Math.max(1, Math.min(200, Math.floor(params!.size!)))
+      : 20;
+    const cowCode = typeof params?.cowCode === "string" ? params.cowCode.trim() : "";
+    const query = new URLSearchParams({
+      days: String(safeDays),
+      page: String(safePage),
+      size: String(safeSize),
+    });
+    if (cowCode.length > 0) {
+      query.set("cow_code", cowCode);
+    }
+
     const res = await fetchWithRetry(
-      `${API_BASE_URL}/health/clinical-history?days=${safeDays}`,
+      `${API_BASE_URL}/health/clinical-history?${query.toString()}`,
       {
         cache: "no-store",
       },

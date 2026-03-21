@@ -54,14 +54,29 @@ def get_health_history(cow_id: int, db: Session = Depends(get_db)) -> list[Healt
 @router.get("/clinical-history", response_model=ClinicalHistoryResponse)
 def get_clinical_history(
     days: int = Query(default=7, ge=1, le=30),
+    page: int = Query(default=1, ge=1),
+    size: int = Query(default=20, ge=1, le=200),
+    cow_code: str | None = Query(default=None, min_length=1, max_length=64),
     db: Session = Depends(get_db),
 ) -> ClinicalHistoryResponse:
     controller = HealthController(HealthService(db=db, ai_client=AIClient()))
-    from_date, to_date, cows = controller.clinical_history(days)
+    from_date, to_date, cows, total_cows, total_pages = controller.clinical_history(
+        days=days,
+        page=page,
+        size=size,
+        cow_code=cow_code,
+    )
     return ClinicalHistoryResponse(
         days=days,
         from_date=from_date,
         to_date=to_date,
+        page=page,
+        size=size,
+        total_cows=total_cows,
+        total_pages=total_pages,
+        has_next=page < total_pages,
+        has_prev=page > 1,
+        cow_code=cow_code,
         cows=cows,
     )
 

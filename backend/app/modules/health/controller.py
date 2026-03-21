@@ -14,5 +14,5 @@ class HealthController:
     def history(self, cow_id: int):
         return self.service.history(cow_id)
 
-    def clinical_history(self, days: int):
-        return self.service.clinical_history(days)
+    def clinical_history(self, days: int, page: int, size: int, cow_code: str | None = None):
+        return self.service.clinical_history(days=days, page=page, size=size, cow_code=cow_code)
