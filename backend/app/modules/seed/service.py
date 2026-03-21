@@ -11,12 +11,14 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.modules.collar.models import Collar
 from app.modules.cow.models import Cow
+from app.modules.health.models import HealthAnalysis
 from app.modules.reading.models import Reading
+from app.shared.enums import HealthStatus
 
 # ─────────────────────────────────────────────
 # CONFIG — igual que life_stories.py
@@ -258,11 +260,83 @@ def _reset_sequence(db: Session, table: str, column: str = "id") -> None:
 
 def _truncate_and_reset(db: Session) -> None:
     """Borra todos los registros y resetea secuencias. Orden FK-safe."""
-    db.execute(text("TRUNCATE TABLE readings RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE health_analyses RESTART IDENTITY CASCADE"))
+    db.execute(text("TRUNCATE TABLE readings RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE collars RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE cows RESTART IDENTITY CASCADE"))
     db.commit()
+
+
+# ─────────────────────────────────────────────
+# MAPEO LABEL → HealthStatus
+# ─────────────────────────────────────────────
+_LABEL_TO_STATUS: dict[str, HealthStatus] = {
+    "sana":       HealthStatus.SANA,
+    "mastitis":   HealthStatus.MASTITIS,
+    "celo":       HealthStatus.CELO,
+    "febril":     HealthStatus.FEBRIL,
+    "digestivo":  HealthStatus.DIGESTIVO,
+}
+
+# Secondary plausible por clase — qué confunde al modelo en cada caso
+_SECONDARY_MAP: dict[str, HealthStatus] = {
+    "sana":       HealthStatus.FEBRIL,      # sana a veces parece febril leve
+    "mastitis":   HealthStatus.FEBRIL,      # mastitis tiene temp alta = febril
+    "celo":       HealthStatus.SANA,        # celo activo puede parecer sana activa
+    "febril":     HealthStatus.MASTITIS,    # temp alta = confusión con mastitis
+    "digestivo":  HealthStatus.MASTITIS,    # movimiento bajo = confusión con mastitis
+}
+
+
+def _mock_confidences(label: str, rng: random.Random) -> tuple[float, float]:
+    """
+    Genera confidencias mockeadas realistas.
+    Primary entre 0.55 y 0.92, secondary el resto menos un pequeño residuo.
+    """
+    primary = round(rng.uniform(0.55, 0.92), 4)
+    residuo = round(rng.uniform(0.01, 0.08), 4)  # probabilidad para las otras clases
+    secondary = round(1.0 - primary - residuo, 4)
+    secondary = max(0.01, secondary)  # nunca negativo
+    return primary, secondary
+
+
+def _generate_health_analyses(
+    cow_id: int,
+    label: str,
+    now: datetime,
+) -> list[dict]:
+    """
+    Genera un HealthAnalysis por hora mirando 1 día hacia atrás desde now.
+    Cada análisis usa los 80 readings previos a ese timestamp (mock).
+    """
+    rng = random.Random(cow_id * 999)  # seed determinístico por vaca
+
+    primary_status   = _LABEL_TO_STATUS.get(label, HealthStatus.SANA)
+    secondary_status = _SECONDARY_MAP.get(label, HealthStatus.SANA)
+
+    # 1 análisis por hora, desde hace 24hs hasta ahora
+    rows = []
+    hours_back = 24
+    for h in range(hours_back, 0, -1):
+        created_at = now - timedelta(hours=h)
+
+        primary_conf, secondary_conf = _mock_confidences(label, rng)
+
+        rows.append({
+            "cow_id":               cow_id,
+            "model_cow_id":         str(cow_id),   # siempre igual al id de la vaca
+            "status":               primary_status,
+            "confidence":           primary_conf,
+            "primary_status":       primary_status,
+            "primary_confidence":   primary_conf,
+            "secondary_status":     secondary_status,
+            "secondary_confidence": secondary_conf,
+            "alert":                primary_status != HealthStatus.SANA,
+            "n_readings_used":      80,
+            "created_at":           created_at,
+        })
+
+    return rows
 
 
 # ─────────────────────────────────────────────
@@ -284,9 +358,10 @@ class SeedService:
 
         random.seed(RANDOM_SEED)
 
-        cows_created    = 0
-        collars_created = 0
-        readings_created = 0
+        cows_created      = 0
+        collars_created   = 0
+        readings_created  = 0
+        analyses_created  = 0
 
         for row_idx, (cow_num, label, fn, _personalidad) in enumerate(RODEO):
             # ── Crear vaca ────────────────────────────────────
@@ -294,10 +369,10 @@ class SeedService:
             cow = Cow(
                 breed=breed,
                 registration_date=datetime.utcnow(),
-                age_months=random.randint(18, 84),  # 1.5 a 7 años
+                age_months=random.randint(18, 84),
             )
             self.db.add(cow)
-            self.db.flush()   # obtiene el id sin commitear aún
+            self.db.flush()
             cows_created += 1
 
             # ── Crear collar asignado a esa vaca ──────────────
@@ -320,7 +395,6 @@ class SeedService:
                 n=n,
             )
 
-            # Bulk insert en lotes de 500 para no saturar memoria
             BATCH = 500
             for batch_start in range(0, len(reading_rows), BATCH):
                 batch = reading_rows[batch_start : batch_start + BATCH]
@@ -328,16 +402,41 @@ class SeedService:
 
             readings_created += len(reading_rows)
 
+        # Commit lecturas antes de generar health analyses
+        # (necesitamos que los cow_ids estén confirmados)
+        self.db.commit()
+
+        # ── Health analyses — 1 por hora, último día, por vaca ──
+        # Reconstruimos el mapeo cow_id → label desde el RODEO en orden
+        # Los ids son 1..N porque hicimos TRUNCATE RESTART IDENTITY
+        for seq, (_cow_num, label, _fn, _p) in enumerate(RODEO):
+            cow_id = seq + 1   # ids arrancaron en 1 después del reset
+
+            analysis_rows = _generate_health_analyses(
+                cow_id=cow_id,
+                label=label,
+                now=now,
+            )
+
+            BATCH = 100
+            for batch_start in range(0, len(analysis_rows), BATCH):
+                batch = analysis_rows[batch_start : batch_start + BATCH]
+                self.db.bulk_insert_mappings(HealthAnalysis, batch)
+
+            analyses_created += len(analysis_rows)
+
         self.db.commit()
 
         return {
-            "cows_created":    cows_created,
-            "collars_created": collars_created,
-            "readings_created": readings_created,
+            "cows_created":      cows_created,
+            "collars_created":   collars_created,
+            "readings_created":  readings_created,
+            "analyses_created":  analyses_created,
             "message": (
                 f"Seed completado: {cows_created} vacas, "
                 f"{collars_created} collares, "
                 f"{readings_created:,} readings "
-                f"({BACK} días atrás → {FORWARD} días adelante)"
+                f"({BACK} días atrás → {FORWARD} días adelante), "
+                f"{analyses_created} health analyses (último día, 1/hora)"
             ),
         }
