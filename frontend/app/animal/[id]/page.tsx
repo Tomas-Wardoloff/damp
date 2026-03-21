@@ -1,4 +1,5 @@
 "use client"
+import { cn } from "@/lib/utils"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -34,20 +35,21 @@ export default function AnimalDetail() {
   const [data, setData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadAnimal() {
-      setIsLoading(true)
-      try {
-        const result = await fetchAnimalDetail(id)
-        if (result) {
-          setData(result)
-        }
-      } catch (err) {
-        console.error(err)
-      } finally {
-        setIsLoading(false)
+  async function loadAnimal(showLoading = true) {
+    if (showLoading) setIsLoading(true)
+    try {
+      const result = await fetchAnimalDetail(id)
+      if (result) {
+        setData(result)
       }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      if (showLoading) setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
     loadAnimal()
   }, [id])
 
@@ -122,13 +124,13 @@ export default function AnimalDetail() {
 
   let trendMsg = null;
   if (isSick && effectiveConf < 0.8 && healthHistory && healthHistory.length > 0) {
-    const sortedHistory = [...healthHistory].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    const sortedHistory = [...healthHistory].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     // skip the first if it matches current timestamp, just look at past 
     const pastRecords = sortedHistory.slice(1);
     const recentRecords = pastRecords.slice(0, 5); // look at the last 5 previous readings
-    
+
     const hadStateRecently = recentRecords.some(r => r.status.toLowerCase() === effectiveLabel.toLowerCase());
-    
+
     const prevRecord = pastRecords.length > 0 ? pastRecords[0] : null;
     let prevConf = 0;
     if (prevRecord && prevRecord.status.toLowerCase() === effectiveLabel.toLowerCase()) {
@@ -197,21 +199,19 @@ export default function AnimalDetail() {
           </div>
         </div>
 
-        <div className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl border transition-colors gap-4 ${
-          isSick 
-            ? "bg-tertiary/10 border-tertiary/40 shadow-lg shadow-tertiary/10" 
+        <div className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl border transition-colors gap-4 ${isSick
+            ? "bg-tertiary/10 border-tertiary/40 shadow-lg shadow-tertiary/10"
             : "bg-surface-container-low border-outline-variant/50"
-        }`}>
+          }`}>
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-4">
-              <span className={`font-bold ${
-                isSick ? "text-xl text-tertiary" : "text-body-md text-on-surface-variant"
-              }`}>
+              <span className={`font-bold ${isSick ? "text-xl text-tertiary" : "text-body-md text-on-surface-variant"
+                }`}>
                 Estado actual:
               </span>
-              <StatusBadge 
-                status={animal.status} 
-                className={isSick ? "px-4 py-2 text-base scale-110 origin-left border-tertiary/60" : ""} 
+              <StatusBadge
+                status={animal.status}
+                className={isSick ? "px-4 py-2 text-base scale-110 origin-left border-tertiary/60" : ""}
                 pulse={isSick}
               />
             </div>
@@ -226,10 +226,10 @@ export default function AnimalDetail() {
                     </span>
                   ) : null}
                 </p>
-                
+
                 {altLabel && altConf !== null && altLabel.toLowerCase() !== "sana" && (
                   <p className="text-label-sm text-on-surface-variant flex items-center gap-1.5 mt-0.5">
-                    <span className="font-semibold">Evaluación alternativa:</span> 
+                    <span className="font-semibold">Evaluación alternativa:</span>
                     El modelo considera posible {altLabel} ({(altConf * 100).toFixed(1)}%)
                   </p>
                 )}
@@ -243,20 +243,25 @@ export default function AnimalDetail() {
               </div>
             )}
           </div>
-          
+
           <div className="flex flex-col items-end gap-3 min-w-fit">
             <p className="text-label-sm text-on-surface-variant max-w-[150px] text-right">
               Aviso: Datos basados en los últimos 5 minutos.
             </p>
             <div className="flex items-center gap-3">
-              <Button variant="primary" className="gap-2 w-fit">
-                <IterationCcwIcon className="w-4 h-4" />
-                Actualizar
+              <Button
+                variant="primary"
+                className="gap-2 w-fit"
+                onClick={() => loadAnimal(true)}
+                disabled={isLoading}
+              >
+                <IterationCcwIcon className={cn("w-4 h-4", isLoading && "animate-spin")} />
+                {isLoading ? "Actualizando..." : "Actualizar"}
               </Button>
               {isSick && (
-                <Button 
-                  variant="secondary" 
-                  className="gap-2 w-fit bg-surface border-tertiary/30 hover:bg-tertiary/10 text-tertiary" 
+                <Button
+                  variant="secondary"
+                  className="gap-2 w-fit bg-surface border-tertiary/30 hover:bg-tertiary/10 text-tertiary"
                   onClick={() => {
                     document.getElementById('diagnosis-panel')?.scrollIntoView({ behavior: 'smooth' });
                   }}

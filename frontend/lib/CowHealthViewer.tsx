@@ -320,6 +320,83 @@ function CowCanvas({ status }: { status: CowHealthStatus }) {
         });
         scene.add(new THREE.Points(pGeo, pMat));
 
+        // ─────────────────────────────────────────────
+        // PASTO — 10 clústeres dentro del círculo (radio ~1.2)
+        // Geometría procedural, sin archivos externos
+        // ─────────────────────────────────────────────
+        const grassGroup = new THREE.Group();
+        const grassMat = new THREE.ShaderMaterial({
+            uniforms: {
+                uColor: { value: new THREE.Vector3(0.05, 1.0, 0.35) },
+            },
+            vertexShader: /* glsl */`
+                varying float vY;
+                void main() {
+                    vY = position.y;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: /* glsl */`
+                uniform vec3 uColor;
+                varying float vY;
+                void main() {
+                    float alpha = 0.75 + vY * 0.25;
+                    gl_FragColor = vec4(uColor * (0.85 + vY * 0.5), alpha);
+                }
+            `,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            side: THREE.DoubleSide,
+        });
+
+        // 10 clústeres distribuidos dentro del círculo (evitando el centro donde está la vaca)
+        const clusterPositions: [number, number, number][] = [
+            [-0.85, 0.0, 0.70],
+            [0.90, 0.0, -0.75],
+            [-1.05, 0.0, -0.40],
+            [0.70, 0.0, 0.90],
+            [-0.30, 0.0, -1.05],
+            [1.10, 0.0, 0.30],
+            [-1.15, 0.0, 0.20],
+            [0.40, 0.0, 1.10],
+            [-0.60, 0.0, -0.95],
+            [0.95, 0.0, 0.70],
+        ];
+
+        clusterPositions.forEach(([cx, , cz]) => {
+            const bladesCount = 10 + Math.floor(Math.random() * 6); // 10–15 hojas por clúster
+            for (let b = 0; b < bladesCount; b++) {
+                const h = 0.22 + Math.random() * 0.16;       // altura 0.22–0.38 (más alto)
+                const w = 0.025 + Math.random() * 0.015;     // ancho más generoso
+                const lean = (Math.random() - 0.5) * 0.55;     // inclinación lateral
+                const rotY = Math.random() * Math.PI;           // rotación aleatoria
+
+                // Hoja: triángulo (base ancha, punta inclinada)
+                const geo = new THREE.BufferGeometry();
+                const verts = new Float32Array([
+                    -w, 0, 0,  // base izquierda
+                    w, 0, 0,  // base derecha
+                    lean, h, 0,  // punta
+                ]);
+                const uvs = new Float32Array([0, 0, 1, 0, 0.5, 1]);
+                geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+                geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+
+                const blade = new THREE.Mesh(geo, grassMat);
+                blade.position.set(
+                    cx + (Math.random() - 0.5) * 0.28,
+                    0.0,
+                    cz + (Math.random() - 0.5) * 0.28,
+                );
+                blade.rotation.y = rotY;
+                grassGroup.add(blade);
+            }
+        });
+
+        scene.add(grassGroup);
+        // ─────────────────────────────────────────────
+
         // Debug: cajas para visualizar zonas
         if (DEBUG_ZONES) {
             // Zona ubres (rojo)
@@ -542,7 +619,7 @@ export default function CowHealthViewer({ cows = DEFAULT_COWS }: { cows?: CowCon
                     <h2 className="text-white text-lg font-bold">Monitor Grupal</h2>
                     <p className="text-white/30 text-xs uppercase tracking-widest">Seleccione unidad</p>
                 </div>
-                
+
                 <div className="flex flex-col gap-2 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
                     {cows.map((cow) => (
                         <CowCard
