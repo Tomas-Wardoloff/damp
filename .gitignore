@@ -3,3 +3,4 @@ app/core/*.pyc
 app/core/*.pyd
 app/__pycache__/
 __pycache__/
+machine-learning/data
