@@ -18,11 +18,17 @@ interface AnimalCardProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
+  const normStatus = animal.status?.toLowerCase() as string;
   const statusBorderColor = {
-    healthy: "border-primary/20 hover:border-primary/50",
-    warning: "border-secondary/30 hover:border-secondary/60",
-    critical: "border-tertiary/40 hover:border-tertiary/80"
-  }[animal.status] || "border-outline-variant/50 hover:border-outline-variant"
+    sana: "border-primary/20 hover:border-primary/50",
+    subclinica: "border-secondary/30 hover:border-secondary/60",
+    clinica: "border-tertiary/40 hover:border-tertiary/80",
+    mastitis: "border-tertiary/40 hover:border-tertiary/80",
+    febril: "border-secondary/30 hover:border-secondary/60",
+    digestivo: "border-secondary/30 hover:border-secondary/60",
+    celo: "border-blue-500/30 hover:border-blue-500/60",
+    "sin datos": "border-outline-variant/50 hover:border-outline-variant",
+  }[normStatus] || "border-outline-variant/50 hover:border-outline-variant"
 
   return (
     <div
@@ -43,7 +49,7 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
             {animal.breed}
           </p>
         </div>
-        <StatusBadge status={animal.status} pulse={animal.status !== 'healthy' && animal.status !== 'sana'} />
+        <StatusBadge status={animal.status} />
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2 gap-y-3">
@@ -67,12 +73,12 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
         </div>
       </div>
 
-      {animal.status === 'critical' && (
+      {normStatus === 'clinica' || normStatus === 'mastitis' ? (
         <div className="absolute inset-0 bg-tertiary/5 pointer-events-none rounded-lg animate-pulse" />
-      )}
-      {animal.status === 'warning' && (
+      ) : null}
+      {normStatus === 'subclinica' || normStatus === 'febril' || normStatus === 'digestivo' ? (
         <div className="absolute inset-0 bg-secondary/5 pointer-events-none rounded-lg" />
-      )}
+      ) : null}
     </div>
   )
 }
