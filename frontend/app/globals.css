@@ -1,26 +1,132 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-sans: var(--font-inter), sans-serif;
+  --font-display: var(--font-manrope), sans-serif;
+  --font-mono: var(--font-space-grotesk), monospace;
+
+  --color-background: var(--color-surface);
+  --color-foreground: var(--color-on-surface);
+
+  /* Primary (Healthy) */
+  --color-primary: #4edea3;
+  --color-primary-container: #10b981;
+  --color-on-primary-container: #002114; /* Assuming dark text on bright container */
+
+  /* Secondary (Warning) */
+  --color-secondary: #ffb95f;
+  --color-secondary-container: #ee9800;
+
+  /* Tertiary (Critical) */
+  --color-tertiary: #ffb3ad;
+  --color-tertiary-container: #ff7a73;
+
+  /* Surfaces & Backgrounds */
+  --color-surface: #10141a;
+  --color-surface-container-low: #181c22;
+  --color-surface-container: #1c2026;
+  --color-surface-container-highest: #353940;
+  --color-surface-bright: #353940;
+
+  /* Text Colors */
+  --color-on-surface: #dfe2eb;
+  --color-on-surface-variant: #9aa0a6; /* Muted text */
+  --color-outline: rgba(223, 226, 235, 0.2);
+  --color-outline-variant: rgba(223, 226, 235, 0.15);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  
+  --spacing-1-5: 0.375rem;
+  --spacing-2-5: 0.625rem;
+
+  --shadow-ambient: 0 20px 40px rgba(0, 0, 0, 0.4);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-on-surface);
+    font-family: var(--font-inter), sans-serif;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  .text-display-lg {
+    font-family: var(--font-manrope), sans-serif;
+    font-size: 3.5rem;
+    line-height: 1.1;
+    font-weight: 600;
+  }
+  .text-headline-md {
+    font-family: var(--font-manrope), sans-serif;
+    font-size: 1.75rem;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+  .text-body-md {
+    font-family: var(--font-inter), sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+  .text-label-md {
+    font-family: var(--font-space-grotesk), monospace;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .text-label-sm {
+    font-family: var(--font-space-grotesk), monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .btn-primary {
+    @apply bg-primary-container text-on-primary-container font-medium rounded-md px-4 py-2 flex items-center justify-center transition-all;
+    background-image: linear-gradient(145deg, var(--color-primary), var(--color-primary-container));
+  }
+  
+  .btn-secondary {
+    @apply bg-transparent text-primary rounded-md px-4 py-2 flex items-center justify-center transition-all;
+    border: 1px solid var(--color-outline-variant);
+  }
+
+  .glass-panel {
+    @apply bg-surface-container/80 backdrop-blur-md;
+  }
+
+  .vital-pulse-primary {
+    box-shadow: 0 0 0 0 rgba(78, 222, 163, 0.7);
+    animation: pulse-primary 2s infinite;
+  }
+  .vital-pulse-secondary {
+    box-shadow: 0 0 0 0 rgba(255, 185, 95, 0.7);
+    animation: pulse-secondary 2s infinite;
+  }
+  .vital-pulse-tertiary {
+    box-shadow: 0 0 0 0 rgba(255, 179, 173, 0.7);
+    animation: pulse-tertiary 2s infinite;
+  }
+}
+
+@keyframes pulse-primary {
+  0% { box-shadow: 0 0 0 0 rgba(78, 222, 163, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(78, 222, 163, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(78, 222, 163, 0); }
+}
+
+@keyframes pulse-secondary {
+  0% { box-shadow: 0 0 0 0 rgba(255, 185, 95, 0.7); }
+  70% { box-shadow: 0 0 0 6px rgba(255, 185, 95, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 185, 95, 0); }
+}
+
+@keyframes pulse-tertiary {
+  0% { box-shadow: 0 0 0 0 rgba(255, 179, 173, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(255, 179, 173, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 179, 173, 0); }
 }
