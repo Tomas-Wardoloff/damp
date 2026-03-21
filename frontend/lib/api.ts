@@ -255,7 +255,7 @@ export async function fetchAnimalDetail(idString: string) {
 
   const [cowRes, readingsRes, healthStatus, healthHistory] = await Promise.all([
     fetch(`${API_BASE_URL}/cows/${cowId}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
-    fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=288`, {
+    fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=200`, {
       cache: "no-store",
     }).then((r) => (r.ok ? r.json() : [])),
     getHealthStatus(cowId),

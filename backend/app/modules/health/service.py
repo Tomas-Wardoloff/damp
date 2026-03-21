@@ -93,6 +93,19 @@ class HealthService:
 
         return analysis
 
+    async def status(self, cow_id: int) -> HealthAnalysis | None:
+        cow = self.db.scalar(select(Cow).where(Cow.id == cow_id))
+        if cow is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cow not found")
+
+        latest_stmt = (
+            select(HealthAnalysis)
+            .where(HealthAnalysis.cow_id == cow_id)
+            .order_by(HealthAnalysis.created_at.desc())
+            .limit(1)
+        )
+        return self.db.scalar(latest_stmt)
+
     def history(self, cow_id: int) -> list[HealthAnalysis]:
         stmt = (
             select(HealthAnalysis)
