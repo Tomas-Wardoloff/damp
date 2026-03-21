@@ -1,10 +1,18 @@
 """
 DAMP Seed Service
-Porta la lógica de life_stories.py directo a la base de datos.
-Reset + recarga de cows, collars y readings en una sola llamada.
+Reset + recarga de cows, collars, readings y health_analyses.
 
-Clases: sana | mastitis | celo | febril | digestivo  (subclinica removida)
-Vacas:  30 (5 por clase) — misma distribución que life_stories
+Vacas: 21 (estado actual exacto)
+  - 10 sanas  (vacas 1-10, vaca 3 tuvo fiebre, vaca 4 tuvo mastitis en el historial)
+  - 5  celo   (vacas 11-15)
+  - 2  mastitis (vacas 16-17)
+  - 2  febril  (vacas 18-19)
+  - 2  digestivo (vacas 20-21)
+
+Readings:  1 día atrás + 6 días adelante (7 días total)
+Health:    7 días atrás, 1 análisis por hora (168 por vaca)
+           Las últimas 24hs reflejan el estado actual.
+           Vacas 3 y 4 tienen episodios pasados (febril y mastitis resp.)
 """
 
 import math
@@ -16,14 +24,17 @@ from sqlalchemy.orm import Session
 
 from app.modules.collar.models import Collar
 from app.modules.cow.models import Cow
+from app.modules.health.models import HealthAnalysis
 from app.modules.reading.models import Reading
+from app.shared.enums import HealthStatus
 
 # ─────────────────────────────────────────────
-# CONFIG — igual que life_stories.py
+# CONFIG
 # ─────────────────────────────────────────────
-IV_MIN   = 5
-BACK     = 2    # días hacia atrás
-FORWARD  = 4    # días hacia adelante
+IV_MIN           = 5
+BACK_READINGS    = 1    # días de readings hacia atrás
+FORWARD_READINGS = 6    # días de readings hacia adelante
+BACK_HEALTH      = 7    # días de health analyses hacia atrás (semana completa)
 
 RANDOM_SEED = 42
 
@@ -35,9 +46,8 @@ BREEDS = [
     "Ayrshire",
 ]
 
-
 # ─────────────────────────────────────────────
-# HELPERS — copiados de life_stories.py
+# HELPERS
 # ─────────────────────────────────────────────
 def _circ(h: float) -> float:
     return 0.55 + 0.45 * (
@@ -53,15 +63,13 @@ def _sigmoide(x: float, centro: float, pendiente: float = 0.1) -> float:
 
 
 # ─────────────────────────────────────────────
-# PERSONALIDADES — mismas funciones que life_stories.py
-# (temp_m, hr_m, rmssd_m, vel_base, rum_factor, voc_extra)
+# PERSONALIDADES
 # ─────────────────────────────────────────────
 def sana_tranquila(i, n, h):
     return 38.5, 62.0, 43.0, 1.2, 1.0, 0.0
 
 def sana_activa(i, n, h):
-    c = _circ(h)
-    return 38.6, 66.0, 41.0, 1.4 + c * 0.8, 1.0, 0.0
+    return 38.6, 66.0, 41.0, 1.4 + _circ(h) * 0.8, 1.0, 0.0
 
 def sana_estresada(i, n, h):
     prog   = i / n
@@ -115,53 +123,86 @@ def digestivo_timpanismo(i, n, h):
 
 
 # ─────────────────────────────────────────────
-# RODEO — 30 vacas, misma distribución que life_stories.py
+# RODEO — 21 vacas
+# Estado actual exacto: 10 sana, 5 celo, 2 mastitis, 2 febril, 2 digestivo
+# cow_id 3 → historial de FEBRIL hace ~4 días
+# cow_id 4 → historial de MASTITIS hace ~5 días
 # ─────────────────────────────────────────────
 RODEO = [
+    # id   label         fn                 personalidad
     (1,  "sana",       sana_tranquila,    "tranquila"),
     (2,  "sana",       sana_activa,       "activa"),
-    (3,  "sana",       sana_activa,       "activa"),
-    (4,  "sana",       sana_estresada,    "estresada"),
+    (3,  "sana",       sana_tranquila,    "tranquila"),   # ex-febril
+    (4,  "sana",       sana_activa,       "activa"),      # ex-mastitis
     (5,  "sana",       sana_tranquila,    "tranquila"),
-
-    (6,  "mastitis",   mastitis_moderada, "moderada"),
-    (7,  "mastitis",   mastitis_severa,   "severa"),
-    (8,  "mastitis",   mastitis_moderada, "moderada"),
-    (9,  "mastitis",   mastitis_severa,   "severa"),
-    (10, "mastitis",   mastitis_moderada, "moderada"),
-
+    (6,  "sana",       sana_activa,       "activa"),
+    (7,  "sana",       sana_estresada,    "estresada"),
+    (8,  "sana",       sana_tranquila,    "tranquila"),
+    (9,  "sana",       sana_activa,       "activa"),
+    (10, "sana",       sana_tranquila,    "tranquila"),
     (11, "celo",       celo_activo,       "activo"),
     (12, "celo",       celo_inicio,       "inicio"),
     (13, "celo",       celo_activo,       "activo"),
     (14, "celo",       celo_inicio,       "inicio"),
     (15, "celo",       celo_activo,       "activo"),
-
-    (16, "febril",     febril_viral,      "viral"),
-    (17, "febril",     febril_moderado,   "moderado"),
+    (16, "mastitis",   mastitis_moderada, "moderada"),
+    (17, "mastitis",   mastitis_severa,   "severa"),
     (18, "febril",     febril_viral,      "viral"),
     (19, "febril",     febril_moderado,   "moderado"),
-    (20, "febril",     febril_viral,      "viral"),
-
-    (21, "digestivo",  digestivo_acidosis,   "acidosis"),
-    (22, "digestivo",  digestivo_timpanismo, "timpanismo"),
-    (23, "digestivo",  digestivo_acidosis,   "acidosis"),
-    (24, "digestivo",  digestivo_timpanismo, "timpanismo"),
-    (25, "digestivo",  digestivo_acidosis,   "acidosis"),
+    (20, "digestivo",  digestivo_acidosis,   "acidosis"),
+    (21, "digestivo",  digestivo_timpanismo, "timpanismo"),
 ]
 
+# ─────────────────────────────────────────────
+# MAPEO LABEL → HealthStatus
+# ─────────────────────────────────────────────
+_LABEL_TO_STATUS: dict[str, HealthStatus] = {
+    "sana":       HealthStatus.SANA,
+    "mastitis":   HealthStatus.MASTITIS,
+    "celo":       HealthStatus.CELO,
+    "febril":     HealthStatus.FEBRIL,
+    "digestivo":  HealthStatus.DIGESTIVO,
+}
+
+_SECONDARY_MAP: dict[str, HealthStatus] = {
+    "sana":       HealthStatus.FEBRIL,
+    "mastitis":   HealthStatus.FEBRIL,
+    "celo":       HealthStatus.SANA,
+    "febril":     HealthStatus.MASTITIS,
+    "digestivo":  HealthStatus.MASTITIS,
+}
+
 
 # ─────────────────────────────────────────────
-# GENERADOR DE READINGS — porta generar_vaca de life_stories.py
+# PERSONALIDAD BASE POR ESTADO — para readings timeline-aware
+# Cuando una vaca estaba "sana" antes de enfermar, sus readings
+# deben reflejar fisiología sana, no de la condición actual
 # ─────────────────────────────────────────────
-def _generate_readings(
-    cow_id: int,
-    collar_id: int,
-    label: str,
-    fn,
-    start: datetime,
-    n: int,
-) -> list[dict]:
-    random.seed(RANDOM_SEED + cow_id)   # seed por vaca para reproducibilidad
+_FN_FOR_LABEL = {
+    "sana":       sana_tranquila,
+    "mastitis":   mastitis_moderada,
+    "celo":       celo_activo,
+    "febril":     febril_viral,
+    "digestivo":  digestivo_acidosis,
+}
+
+
+def _label_for_tick(cow_id: int, current_label: str, hours_ago: float) -> str:
+    """Devuelve qué label fisiológico aplica en un tick dado."""
+    timeline = _HISTORIAL.get(cow_id)
+    if timeline is None:
+        return current_label
+    for seg_label, desde, hasta in timeline:
+        if hasta < hours_ago <= desde:
+            return seg_label
+    return timeline[-1][0]
+
+
+# ─────────────────────────────────────────────
+# GENERADOR DE READINGS — timeline-aware
+# ─────────────────────────────────────────────
+def _generate_readings(cow_id, collar_id, label, fn, start, n, now) -> list[dict]:
+    random.seed(RANDOM_SEED + cow_id)
 
     lat0 = -34.6037 + random.uniform(-0.05, 0.05)
     lon0 = -60.9265 + random.uniform(-0.05, 0.05)
@@ -182,9 +223,13 @@ def _generate_readings(
         c   = _circ(h)
         rc  = random.gauss(0, 1)
 
-        temp_m, hr_m, rmssd_m, vel_base, rum_factor, voc_extra = fn(i, n, h)
+        # Determinar qué fisiología aplica en este tick
+        hours_ago_this_tick = (now - ts).total_seconds() / 3600
+        tick_label = _label_for_tick(cow_id, label, hours_ago_this_tick)
+        tick_fn    = _FN_FOR_LABEL.get(tick_label, fn)
 
-        # Micro-eventos cross-class (~4%)
+        temp_m, hr_m, rmssd_m, vel_base, rum_factor, voc_extra = tick_fn(i, n, h)
+
         micro_temp = micro_hr = micro_rmssd = 0.0
         if random.random() < 0.04:
             evento = random.choice(["temp_spike", "hr_spike", "rmssd_drop", "rmssd_up"])
@@ -193,38 +238,29 @@ def _generate_readings(
             elif evento == "rmssd_drop": micro_rmssd = -random.uniform(5, 12)
             elif evento == "rmssd_up":   micro_rmssd =  random.uniform(4, 10)
 
-        # Temperatura — None si falla el sensor (~0.8%)
         temp_val = _clamp(random.gauss(temp_m, 0.45) + rc * 0.08 + micro_temp, 36.5, 42.5)
-        temp = None if random.random() < 0.008 else round(temp_val, 2)
+        temp     = round(temp_val if random.random() >= 0.008 else 38.6, 2)
 
-        # HR
         hr_raw = _clamp(random.gauss(hr_m, 7.0) + rc * 1.5 + micro_hr, 38, 130)
-        hr = round(random.uniform(38, 48) if random.random() < 0.010 else hr_raw, 1)
+        hr     = round(random.uniform(38, 48) if random.random() < 0.010 else hr_raw, 1)
 
-        # HRV
         rmssd = round(max(4.0, random.gauss(max(5.0, rmssd_m), 6.5) - rc * 0.8 + micro_rmssd), 2)
         sdnn  = round(max(rmssd * 1.05, rmssd * random.uniform(1.1, 1.45)), 2)
 
-        # Rumia
         prob_rum  = _clamp((rmssd_m / 40.0) * (0.6 + 0.4 * c) * rum_factor, 0.02, 0.92)
         if random.random() < 0.02:
             prob_rum = min(prob_rum + 0.4, 1.0)
         hubo_rumia = random.random() < prob_rum
 
-        # Vocalización
         prob_voc   = _clamp(0.07 + (temp_m - 38.6) / 2.0 * 0.20 + voc_extra, 0.02, 0.95)
         hubo_vocal = random.random() < prob_voc
 
-        # Velocidad
-        vel_std = 0.8 if label == "celo" else 0.6
-        vel_base_adj = vel_base if label == "celo" else vel_base * c
-        vel    = round(max(0.0, random.gauss(vel_base_adj, vel_std)), 2)
-        metros = round(vel * (IV_MIN / 60) * 1000, 1)
+        vel_std      = 0.8 if tick_label == "celo" else 0.6
+        vel_base_adj = vel_base if tick_label == "celo" else vel_base * c
+        vel          = round(max(0.0, random.gauss(vel_base_adj, vel_std)), 2)
+        metros       = round(vel * (IV_MIN / 60) * 1000, 1)
 
-        # GPS
-        if gps_freeze > 0 and gps_freeze <= i < gps_freeze + gps_freeze_len:
-            pass
-        else:
+        if not (gps_freeze > 0 and gps_freeze <= i < gps_freeze + gps_freeze_len):
             paso = (vel / 3600) * IV_MIN * 60 / 111320
             lat  = _clamp(lat + random.gauss(0, paso * 0.5), lat0 - radio, lat0 + radio)
             lon  = _clamp(lon + random.gauss(0, paso * 0.5), lon0 - radio, lon0 + radio)
@@ -233,7 +269,7 @@ def _generate_readings(
             "timestamp":                 ts,
             "cow_id":                    cow_id,
             "collar_id":                 collar_id,
-            "temperatura_corporal_prom": temp if temp is not None else 38.6,  # fallback si sensor falló
+            "temperatura_corporal_prom": temp,
             "hubo_rumia":                hubo_rumia,
             "frec_cardiaca_prom":        hr,
             "rmssd":                     rmssd,
@@ -244,22 +280,125 @@ def _generate_readings(
             "metros_recorridos":         metros,
             "velocidad_movimiento_prom": vel,
         })
-
     return rows
 
 
 # ─────────────────────────────────────────────
-# RESET HELPERS
+# HISTORIAL REALISTA POR VACA
+# Cada entrada: (label, desde_hours_ago, hasta_hours_ago)
+# "desde" y "hasta" en horas contadas desde AHORA hacia atrás
+# Condiciones no duran más de 3-4 días excepto sana
 # ─────────────────────────────────────────────
-def _reset_sequence(db: Session, table: str, column: str = "id") -> None:
-    """Resetea el autoincremental de una tabla a 1."""
-    db.execute(text(f"ALTER SEQUENCE {table}_{column}_seq RESTART WITH 1"))
+_HISTORIAL: dict[int, list[tuple[str, int, int]]] = {
+    # Sanas estables toda la semana
+    1:  [("sana",  168,   0)],
+    2:  [("sana",  168,   0)],
+    5:  [("sana",  168,   0)],
+    6:  [("sana",  168,   0)],
+    7:  [("sana",  168,   0)],   # estresada pero siempre sana
+    8:  [("sana",  168,   0)],
+    9:  [("sana",  168,   0)],
+    10: [("sana",  168,   0)],
+
+    # Vaca 3 — tuvo fiebre hace 5-3 días, ahora recuperada
+    3: [
+        ("sana",   168, 120),
+        ("febril", 120,  72),   # 48hs de episodio febril
+        ("sana",    72,   0),
+    ],
+
+    # Vaca 4 — tuvo mastitis hace 6-4 días, ahora recuperada
+    4: [
+        ("sana",     168, 144),
+        ("mastitis", 144,  96),  # 48hs de mastitis
+        ("sana",      96,   0),
+    ],
+
+    # Celo — arrancó hace 1-2 días, no más
+    11: [("sana", 168,  30), ("celo",  30,  0)],
+    12: [("sana", 168,  20), ("celo",  20,  0)],
+    13: [("sana", 168,  36), ("celo",  36,  0)],
+    14: [("sana", 168,  18), ("celo",  18,  0)],
+    15: [("sana", 168,  28), ("celo",  28,  0)],
+
+    # Mastitis — arrancó hace 2-3 días, en curso
+    16: [("sana", 168,  72), ("mastitis",  72,  0)],
+    17: [("sana", 168,  48), ("mastitis",  48,  0)],
+
+    # Febril — arrancó hace 1-2 días, en curso
+    18: [("sana", 168,  42), ("febril",  42,  0)],
+    19: [("sana", 168,  28), ("febril",  28,  0)],
+
+    # Digestivo — arrancó hace 1.5-2.5 días, en curso
+    20: [("sana", 168,  60), ("digestivo",  60,  0)],
+    21: [("sana", 168,  36), ("digestivo",  36,  0)],
+}
 
 
+def _status_for_hour(cow_id: int, label: str, hours_ago: int) -> HealthStatus:
+    """Devuelve el HealthStatus que corresponde a esa hora del historial."""
+    timeline = _HISTORIAL.get(cow_id)
+    if timeline is None:
+        return _LABEL_TO_STATUS.get(label, HealthStatus.SANA)
+
+    for seg_label, desde, hasta in timeline:
+        if hasta < hours_ago <= desde:
+            return _LABEL_TO_STATUS.get(seg_label, HealthStatus.SANA)
+
+    # fallback: último segmento
+    return _LABEL_TO_STATUS.get(timeline[-1][0], HealthStatus.SANA)
+
+
+def _secondary_for_status(status: HealthStatus) -> HealthStatus:
+    return {
+        HealthStatus.SANA:       HealthStatus.FEBRIL,
+        HealthStatus.MASTITIS:   HealthStatus.FEBRIL,
+        HealthStatus.CELO:       HealthStatus.SANA,
+        HealthStatus.FEBRIL:     HealthStatus.MASTITIS,
+        HealthStatus.DIGESTIVO:  HealthStatus.MASTITIS,
+    }.get(status, HealthStatus.SANA)
+
+
+def _mock_confidences(rng: random.Random) -> tuple[float, float]:
+    primary = round(rng.uniform(0.55, 0.92), 4)
+    residuo = round(rng.uniform(0.01, 0.08), 4)
+    secondary = max(0.01, round(1.0 - primary - residuo, 4))
+    return primary, secondary
+
+
+def _generate_health_analyses(cow_id: int, label: str, now: datetime) -> list[dict]:
+    rng = random.Random(cow_id * 999)
+
+    rows = []
+    # hours_ago va de BACK_HEALTH*24 hasta 1 (más viejo → más reciente)
+    for hours_ago in range(BACK_HEALTH * 24, 0, -1):
+        created_at     = now - timedelta(hours=hours_ago)
+        primary_status = _status_for_hour(cow_id, label, hours_ago)
+        secondary_status = _secondary_for_status(primary_status)
+        primary_conf, secondary_conf = _mock_confidences(rng)
+
+        rows.append({
+            "cow_id":               cow_id,
+            "model_cow_id":         str(cow_id),
+            "status":               primary_status,
+            "confidence":           primary_conf,
+            "primary_status":       primary_status,
+            "primary_confidence":   primary_conf,
+            "secondary_status":     secondary_status,
+            "secondary_confidence": secondary_conf,
+            "alert":                primary_status != HealthStatus.SANA,
+            "n_readings_used":      80,
+            "created_at":           created_at,
+        })
+    return rows
+
+
+# ─────────────────────────────────────────────
+# RESET FK-SAFE
+# ─────────────────────────────────────────────
 def _truncate_and_reset(db: Session) -> None:
-    """Borra todos los registros y resetea secuencias. Orden FK-safe."""
-    db.execute(text("TRUNCATE TABLE readings RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE health_analyses RESTART IDENTITY CASCADE"))
+    db.execute(text("TRUNCATE TABLE readings RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE collars RESTART IDENTITY CASCADE"))
     db.execute(text("TRUNCATE TABLE cows RESTART IDENTITY CASCADE"))
     db.commit()
@@ -275,32 +414,29 @@ class SeedService:
     def create_readings(self) -> dict:
         now   = datetime.utcnow().replace(second=0, microsecond=0)
         now   = now - timedelta(minutes=now.minute % IV_MIN)
-        start = now - timedelta(days=BACK)
-        end   = now + timedelta(days=FORWARD)
+        start = now - timedelta(days=BACK_READINGS)
+        end   = now + timedelta(days=FORWARD_READINGS)
         n     = int((end - start).total_seconds() / 60 // IV_MIN)
 
-        # 1. Reset completo en orden correcto (FK-safe)
         _truncate_and_reset(self.db)
-
         random.seed(RANDOM_SEED)
 
-        cows_created    = 0
-        collars_created = 0
+        cows_created     = 0
+        collars_created  = 0
         readings_created = 0
+        analyses_created = 0
 
-        for row_idx, (cow_num, label, fn, _personalidad) in enumerate(RODEO):
-            # ── Crear vaca ────────────────────────────────────
-            breed = BREEDS[row_idx % len(BREEDS)]
+        # ── Paso 1: cows + collars + readings ──────────────────
+        for row_idx, (cow_num, label, fn, _p) in enumerate(RODEO):
             cow = Cow(
-                breed=breed,
+                breed=BREEDS[row_idx % len(BREEDS)],
                 registration_date=datetime.utcnow(),
-                age_months=random.randint(18, 84),  # 1.5 a 7 años
+                age_months=random.randint(18, 84),
             )
             self.db.add(cow)
-            self.db.flush()   # obtiene el id sin commitear aún
+            self.db.flush()
             cows_created += 1
 
-            # ── Crear collar asignado a esa vaca ──────────────
             collar = Collar(
                 assigned_cow_id=cow.id,
                 assigned_at=datetime.utcnow(),
@@ -310,7 +446,6 @@ class SeedService:
             self.db.flush()
             collars_created += 1
 
-            # ── Generar y bulk-insert readings ────────────────
             reading_rows = _generate_readings(
                 cow_id=cow.id,
                 collar_id=collar.id,
@@ -318,26 +453,41 @@ class SeedService:
                 fn=fn,
                 start=start,
                 n=n,
+                now=now,
             )
-
-            # Bulk insert en lotes de 500 para no saturar memoria
             BATCH = 500
-            for batch_start in range(0, len(reading_rows), BATCH):
-                batch = reading_rows[batch_start : batch_start + BATCH]
-                self.db.bulk_insert_mappings(Reading, batch)
-
+            for b in range(0, len(reading_rows), BATCH):
+                self.db.bulk_insert_mappings(Reading, reading_rows[b:b + BATCH])
             readings_created += len(reading_rows)
 
         self.db.commit()
 
+        # ── Paso 2: health analyses ─────────────────────────────
+        # Los cow_ids son 1..21 garantizados por el RESTART IDENTITY
+        for seq, (_cow_num, label, _fn, _p) in enumerate(RODEO):
+            cow_id = seq + 1
+            analysis_rows = _generate_health_analyses(
+                cow_id=cow_id,
+                label=label,
+                now=now,
+            )
+            BATCH = 100
+            for b in range(0, len(analysis_rows), BATCH):
+                self.db.bulk_insert_mappings(HealthAnalysis, analysis_rows[b:b + BATCH])
+            analyses_created += len(analysis_rows)
+
+        self.db.commit()
+
         return {
-            "cows_created":    cows_created,
-            "collars_created": collars_created,
-            "readings_created": readings_created,
+            "cows_created":      cows_created,
+            "collars_created":   collars_created,
+            "readings_created":  readings_created,
+            "analyses_created":  analyses_created,
             "message": (
-                f"Seed completado: {cows_created} vacas, "
-                f"{collars_created} collares, "
+                f"Seed OK — {cows_created} vacas, {collars_created} collares, "
                 f"{readings_created:,} readings "
-                f"({BACK} días atrás → {FORWARD} días adelante)"
+                f"({BACK_READINGS}d atrás → {FORWARD_READINGS}d adelante), "
+                f"{analyses_created:,} health analyses "
+                f"({BACK_HEALTH} días atrás, 1/hora)"
             ),
         }
