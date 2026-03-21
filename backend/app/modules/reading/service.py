@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -27,12 +29,19 @@ class ReadingService:
         return reading
 
     def list_by_cow(self, cow_id: int, page: int, size: int) -> tuple[list[Reading], int]:
-        total_stmt = select(func.count(Reading.id)).where(Reading.cow_id == cow_id)
+        now_utc = datetime.utcnow()
+        total_stmt = select(func.count(Reading.id)).where(
+            Reading.cow_id == cow_id,
+            Reading.timestamp <= now_utc,
+        )
         total = self.db.scalar(total_stmt) or 0
 
         stmt = (
             select(Reading)
-            .where(Reading.cow_id == cow_id)
+            .where(
+                Reading.cow_id == cow_id,
+                Reading.timestamp <= now_utc,
+            )
             .order_by(Reading.timestamp.desc())
             .offset((page - 1) * size)
             .limit(size)
@@ -41,15 +50,20 @@ class ReadingService:
         return items, total
 
     def get_recent_by_cow(self, cow_id: int, limit: int) -> list[Reading]:
+        now_utc = datetime.utcnow()
         stmt = (
             select(Reading)
-            .where(Reading.cow_id == cow_id)
+            .where(
+                Reading.cow_id == cow_id,
+                Reading.timestamp <= now_utc,
+            )
             .order_by(Reading.timestamp.desc())
             .limit(limit)
         )
         return list(self.db.scalars(stmt).all())
 
     def list_latests(self) -> list[Reading]:
+        now_utc = datetime.utcnow()
         latest_ranked = select(
             Reading.id.label("reading_id"),
             func.row_number()
@@ -58,7 +72,7 @@ class ReadingService:
                 order_by=(Reading.timestamp.desc(), Reading.id.desc()),
             )
             .label("row_num"),
-        ).subquery()
+        ).where(Reading.timestamp <= now_utc).subquery()
 
         stmt = (
             select(Reading)

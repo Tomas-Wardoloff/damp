@@ -27,9 +27,13 @@ class HealthService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cow not found")
 
         window = limit or settings.health_window_size
+        now_utc = datetime.utcnow()
         readings_stmt = (
             select(Reading)
-            .where(Reading.cow_id == cow_id)
+            .where(
+                Reading.cow_id == cow_id,
+                Reading.timestamp <= now_utc,
+            )
             .order_by(Reading.timestamp.desc())
             .limit(window)
         )
@@ -99,18 +103,26 @@ class HealthService:
         if cow is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cow not found")
 
+        now_utc = datetime.utcnow()
         latest_stmt = (
             select(HealthAnalysis)
-            .where(HealthAnalysis.cow_id == cow_id)
+            .where(
+                HealthAnalysis.cow_id == cow_id,
+                HealthAnalysis.created_at <= now_utc,
+            )
             .order_by(HealthAnalysis.created_at.desc())
             .limit(1)
         )
         return self.db.scalar(latest_stmt)
 
     def history(self, cow_id: int) -> list[HealthAnalysis]:
+        now_utc = datetime.utcnow()
         stmt = (
             select(HealthAnalysis)
-            .where(HealthAnalysis.cow_id == cow_id)
+            .where(
+                HealthAnalysis.cow_id == cow_id,
+                HealthAnalysis.created_at <= now_utc,
+            )
             .order_by(HealthAnalysis.created_at.desc())
         )
         return list(self.db.scalars(stmt).all())
@@ -121,7 +133,10 @@ class HealthService:
 
         stmt = (
             select(HealthAnalysis)
-            .where(HealthAnalysis.created_at >= from_date)
+            .where(
+                HealthAnalysis.created_at >= from_date,
+                HealthAnalysis.created_at <= to_date,
+            )
             .order_by(HealthAnalysis.cow_id.asc(), HealthAnalysis.created_at.asc())
         )
         analyses = list(self.db.scalars(stmt).all())
