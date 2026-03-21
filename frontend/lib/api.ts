@@ -196,43 +196,31 @@ export async function fetchDashboardData(): Promise<{
 }> {
   const [latestReadings, cows] = await Promise.all([getLatestReadings(), getCows()]);
 
-  const allCowIds = new Set<number>();
-  const cowInfoMap = new Map<number, any>();
-  const readingMap = new Map<number, any>();
-
-  if (Array.isArray(cows)) {
-    cows.forEach((cow) => {
-      const cowId = Number(cow.id || cow.cow_id);
-      if (!Number.isFinite(cowId)) return;
-      allCowIds.add(cowId);
-      cowInfoMap.set(cowId, cow);
-    });
+  if (!latestReadings || latestReadings.length === 0) {
+    return { animals: [], alerts: MOCK_ALERTS };
   }
 
-  if (Array.isArray(latestReadings)) {
-    latestReadings.forEach((reading) => {
-      const cowId = Number(reading.cow_id || reading.id);
-      if (!Number.isFinite(cowId)) return;
-      allCowIds.add(cowId);
-      readingMap.set(cowId, reading);
-    });
+  // Create lookup for breed
+  const cowMap = new Map();
+  if (cows) {
+    cows.forEach((cow) =>
+      cowMap.set(cow.id || cow.cow_id, cow.breed || "Mestiza"),
+    );
   }
 
-  if (allCowIds.size === 0) {
-    return { animals: [], alerts: [] };
-  }
-
+  // To build the dashboard we need the AI status for each reading.
+  // We process in batches to prevent "Failed to fetch" errors caused by opening
+  // too many concurrent connections (browser connection limit / local server socket exhaustion).
   const animals: Animal[] = [];
   const chunkSize = 5;
   const allCowsArray = Array.from(allCowIds);
 
-  for (let i = 0; i < allCowsArray.length; i += chunkSize) {
-    const chunk = allCowsArray.slice(i, i + chunkSize);
+  for (let i = 0; i < latestReadings.length; i += chunkSize) {
+    const chunk = latestReadings.slice(i, i + chunkSize);
 
     const chunkResults = await Promise.all(
-      chunk.map(async (cowId) => {
-        const cow = cowInfoMap.get(cowId) || {};
-        const reading = readingMap.get(cowId);
+      chunk.map(async (reading) => {
+        const cowId = reading.cow_id;
         const health = await getHealthStatus(cowId);
         const prediction = pickEffectivePrediction(health);
 

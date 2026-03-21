@@ -11,6 +11,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
 import { CowStatus } from "@/types"
+// Keep mock generator just for filling chart if DB has no historical data yet
+import { generateBiometricData } from "@/lib/mock-data"
 
 export default function AnimalDetail() {
   const router = useRouter()
@@ -56,24 +58,9 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus, prediction } = data
-
-  function formatTimeInSystem(dateString: string) {
-    if (!dateString) return "Desconocido";
-    const start = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now.getTime() - start.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    if (diffDays < 30) return `${diffDays} días`;
-    const diffMonths = Math.floor(diffDays / 30);
-    if (diffMonths < 12) return `${diffMonths} meses`;
-    return `${Math.floor(diffMonths / 12)} años`;
-  }
-  function getStressLevel(rmssd: number, sdnn: number) {
-    if (rmssd < 20 || sdnn < 30) return { value: "Elevado", status: "high" as const };
-    if (rmssd < 40 || sdnn < 50) return { value: "Moderado", status: "warning" as const };
-    return { value: "Normal", status: "normal" as const };
-  }
+  const { animal, chartData, healthStatus } = data
+  const isCritical = animal.status === "critical"
+  const biometricsStatus = isCritical ? "high" as const : "normal" as const
 
   const isCritical = animal.status === "critical"
   const biometricsStatus = isCritical ? ("critical" as const) : animal.status === "warning" ? ("warning" as const) : ("normal" as const)
@@ -177,21 +164,11 @@ export default function AnimalDetail() {
         </section>
 
         <section className="mt-4">
-          {!healthStatus ? (
-            <div className="bg-surface-container-low p-6 rounded-lg border border-dashed border-outline-variant/40 flex flex-col items-center justify-center gap-1 text-center py-12">
-              <span className="text-on-surface-variant font-mono text-label-md uppercase tracking-widest">
-                Datos Insuficientes
-              </span>
-              <p className="text-on-surface-variant text-body-sm max-w-md mt-1 opacity-70">
-                El modelo predictivo de IA requiere un mínimo de 5 lecturas recientes para procesar y emitir un diagnóstico confiable.
-              </p>
-            </div>
-          ) : (
-            <DiagnosisPanel
-              status={healthStatus.status as CowStatus}
-              confidence={healthStatus.confidence}
-            />
-          )}
+          <DiagnosisPanel
+            condition={conditionStr}
+            confidence={confPercent}
+            recommendation={recomStr}
+          />
         </section>
       </div>
     </div>
