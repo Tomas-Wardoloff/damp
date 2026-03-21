@@ -13,6 +13,8 @@ class Settings(BaseSettings):
 	database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/livestock"
 	ai_service_url: str = "https://damp-machine-learning.onrender.com"
 	health_window_size: int = 5
+	health_scheduler_enabled: bool = True
+	health_scheduler_cycle_minutes: int = 60
 	auto_create_tables: bool = True
 
 
