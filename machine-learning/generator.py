@@ -43,21 +43,21 @@ RODEO = {
 }
 
 BASE = {
-    "temp": 38.6,  "temp_s": 0.45,
+    "temp": 38.6,  "temp_s": 0.55,   # mas varianza natural
     "hr":   65.0,  "hr_s":   11.0,
-    "rmssd":40.0,  "rmssd_s":9.0,
-    "vel":   1.7,  "vel_s":  0.70,
+    "rmssd":40.0,  "rmssd_s":13.0,   # era 9 — mas overlap
+    "vel":   1.7,  "vel_s":   1.00,  # era 0.70 — mas overlap
     "p_rumia": 0.52,
     "p_vocal": 0.07,
 }
 
 DELTA = {
-    "temp":    +1.8,
+    "temp":    +1.4,    # era +1.8 — menos separacion
     "hr":      +12.0,
-    "rmssd":   -26.0,
-    "vel":      -1.3,
-    "p_rumia": -0.42,
-    "p_vocal": +0.22,
+    "rmssd":   -18.0,   # era -26 — gap: sana=40, sub~30, cli~22
+    "vel":      -0.85,  # era -1.3 — gap: sana=1.7, sub~1.2, cli~0.85
+    "p_rumia": -0.32,   # era -0.42
+    "p_vocal": +0.18,   # era +0.22
 }
 
 # ─────────────────────────────────────────────
