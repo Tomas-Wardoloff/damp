@@ -210,3 +210,64 @@ export async function fetchAnimalDetail(idString: string) {
 
   return { animal: animalInfo, chartData, healthStatus, healthHistory };
 }
+
+export async function getLatestHealthByHistory(cowId: number): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health/history/${cowId}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const history = await res.json();
+    if (!Array.isArray(history) || history.length === 0) return null;
+    return history[0];
+  } catch (err) {
+    console.error(`Failed to fetch health history for cow ${cowId}:`, err);
+    return null;
+  }
+}
+
+export async function getHealthSchedulerConfig(): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health/scheduler/config`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch scheduler config:", err);
+    return null;
+  }
+}
+
+export async function updateHealthSchedulerConfig(payload: {
+  enabled: boolean;
+  cycle_minutes: number;
+}): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health/scheduler/config`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to update scheduler config:", err);
+    return null;
+  }
+}
+
+export async function getHealthSchedulerRuntime(): Promise<any | null> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health/scheduler/runtime`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch scheduler runtime:", err);
+    return null;
+  }
+}
