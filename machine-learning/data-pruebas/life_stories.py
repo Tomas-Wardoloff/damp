@@ -247,7 +247,7 @@ def generar_vaca(cow_id, label, fn, personalidad, start, n):
             "label":                      label,
             "label_animal":               label,
             "timestamp":                  ts.strftime("%Y-%m-%d %H:%M:%S"),
-            "collar_id":                  f"COW_{cow_id:03d}",
+            "animal_id":                  f"COW_{cow_id:03d}",
             "progresion":                 round(i / n, 4),
             "temperatura_corporal_prom":  temp,
             "hubo_rumia":                 hubo_rumia,
