@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.modules.cow.controller import CowController
-from app.modules.cow.schemas import CowCreate, CowResponse
+from app.modules.cow.schemas import CowCreate, CowResponse, CowSummaryResponse
 from app.modules.cow.service import CowService
 
 router = APIRouter(prefix="/cows", tags=["cows"])
@@ -25,3 +25,8 @@ def list_cows(db: Session = Depends(get_db)) -> list[CowResponse]:
 def get_cow(cow_id: int, db: Session = Depends(get_db)) -> CowResponse:
     controller = CowController(CowService(db))
     return controller.get_by_id(cow_id)
+
+@router.get("/summary", response_model=CowSummaryResponse)
+def get_cows_summary(db: Session = Depends(get_db)) -> CowSummaryResponse:
+    controller = CowController(CowService(db))
+    return controller.get_summary()

@@ -23,3 +23,51 @@ class CowService:
     def get_by_id(self, cow_id: int) -> Cow | None:
         stmt = select(Cow).where(Cow.id == cow_id)
         return self.db.scalar(stmt)
+
+    def get_summary(self) -> dict:
+        from sqlalchemy import func
+        from collections import Counter
+        from app.modules.reading.models import Reading
+        from app.modules.health.models import HealthAnalysis
+
+        cows = self.list_all()
+
+        # Latest readings
+        subq_r = select(Reading.cow_id, func.max(Reading.timestamp).label("max_ts")).group_by(Reading.cow_id).subquery()
+        stmt_r = select(Reading).join(subq_r, (Reading.cow_id == subq_r.c.cow_id) & (Reading.timestamp == subq_r.c.max_ts))
+        latest_readings = {r.cow_id: r for r in self.db.scalars(stmt_r).all()}
+
+        # Latest health
+        subq_h = select(HealthAnalysis.cow_id, func.max(HealthAnalysis.created_at).label("max_ts")).group_by(HealthAnalysis.cow_id).subquery()
+        stmt_h = select(HealthAnalysis).join(subq_h, (HealthAnalysis.cow_id == subq_h.c.cow_id) & (HealthAnalysis.created_at == subq_h.c.max_ts))
+        latest_health = {h.cow_id: h for h in self.db.scalars(stmt_h).all()}
+
+        summary_counts = Counter()
+        cows_list = []
+
+        for cow in cows:
+            reading = latest_readings.get(cow.id)
+            health = latest_health.get(cow.id)
+
+            # Determine status
+            status = "sin datos"
+            if health and health.status:
+                status = health.status.value.lower()
+            summary_counts[status] += 1
+
+            # Build item
+            item = {
+                "id": str(cow.id),
+                "breed": cow.breed or "Mestiza",
+                "status": status,
+                "temperature": reading.temperatura_corporal_prom if reading else "--",
+                "heartRate": round(reading.frec_cardiaca_prom) if reading and reading.frec_cardiaca_prom else "--",
+                "distance": round(reading.metros_recorridos) if reading and reading.metros_recorridos else "--",
+                "lastUpdated": reading.timestamp.isoformat() if reading else "N/A"
+            }
+            cows_list.append(item)
+
+        return {
+            "summary": dict(summary_counts),
+            "cows": cows_list
+        }

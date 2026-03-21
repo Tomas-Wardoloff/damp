@@ -16,3 +16,18 @@ class CowResponse(BaseModel):
     age_months: int
 
     model_config = {"from_attributes": True}
+
+
+class CowSummaryItem(BaseModel):
+    id: str
+    breed: str
+    status: str
+    temperature: float | str
+    heartRate: float | str
+    distance: float | str
+    lastUpdated: str
+
+
+class CowSummaryResponse(BaseModel):
+    summary: dict[str, int]
+    cows: list[CowSummaryItem]

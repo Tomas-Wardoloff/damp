@@ -291,68 +291,36 @@ export async function getHealthSchedulerRuntime(): Promise<any | null> {
 export async function fetchDashboardData(): Promise<{
   animals: Animal[];
 }> {
-  const [latestReadings, cows] = await Promise.all([
-    getLatestReadings(),
-    getCows(),
-  ]);
-
-  if (!cows || cows.length === 0) {
+  try {
+    const res = await fetchWithRetry(`${API_BASE_URL}/cows/summary`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error("Failed to fetch dashboard data");
+      return { animals: [] };
+    }
+    const data = await res.json();
+    const animals = (data.cows || []).map((cow: any) => ({
+      ...cow,
+      lastUpdated:
+        cow.lastUpdated && cow.lastUpdated !== "N/A"
+          ? new Date(cow.lastUpdated).toLocaleString([], {
+              year: "numeric",
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "N/A",
+    }));
+    return { animals };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return { animals: [] };
+    }
+    console.error("Failed to fetch dashboard data:", err);
     return { animals: [] };
   }
-
-  // Create lookup for readings mapping cow_id to reading
-  const readingMap = new Map();
-  if (latestReadings) {
-    latestReadings.forEach((r) => readingMap.set(r.cow_id, r));
-  }
-
-  // We process in batches to prevent "Failed to fetch" errors caused by opening
-  // too many concurrent connections
-  const animals: Animal[] = [];
-  const chunkSize = 5;
-
-  for (let i = 0; i < cows.length; i += chunkSize) {
-    const chunk = cows.slice(i, i + chunkSize);
-
-    const chunkResults = await Promise.all(
-      chunk.map(async (cow) => {
-        const cowId = cow.id || cow.cow_id;
-        const reading = readingMap.get(cowId);
-
-        let health = null;
-        if (reading) {
-          health = await getHealthStatus(cowId);
-        }
-        const prediction = pickEffectivePrediction(health);
-
-        return {
-          id: String(cowId),
-          breed: cow.breed || "Mestiza",
-          status: toFrontendStatus(prediction.status),
-          temperature: reading?.temperatura_corporal_prom ?? "--",
-          heartRate: reading?.frec_cardiaca_prom
-            ? Math.round(reading.frec_cardiaca_prom)
-            : "--",
-          distance: reading?.metros_recorridos
-            ? Math.round(reading.metros_recorridos)
-            : "--",
-          lastUpdated: reading?.timestamp
-            ? new Date(reading.timestamp).toLocaleString([], {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "N/A",
-        } satisfies Animal;
-      }),
-    );
-
-    animals.push(...chunkResults);
-  }
-
-  return { animals };
 }
 
 export async function fetchAnimalDetail(idString: string) {
