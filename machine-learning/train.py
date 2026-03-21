@@ -16,7 +16,7 @@ from sklearn.pipeline import Pipeline
 
 CSV_PATH    = "data/damp_data_temporal.csv"
 MODEL_PATH  = "models/mastitis_model.pkl"
-WINDOW_SIZE = 100
+WINDOW_SIZE = 80
 STEP_SIZE   = 30
 SEED        = 42
 
