@@ -1,26 +1,4 @@
-"""
-DAMP - Distributed Animal Monitoring Platform
-Generador de datos sintéticos con anomalías realistas
-
-Genera tres archivos en ./data/:
-  damp_data_temporal.csv  — dataset completo (todos los animales)
-  damp_sample_temporal.csv — muestra de 200 filas
-  damp_data_test.csv      — BOV_018 sola (progresión completa para testeo)
-
-Anomalías integradas directamente en el loop:
-  - Falla de sensor (NaN esporádico)
-  - Spike de temperatura por estrés ambiental en animal sano
-  - Caída de HR por artefacto del sensor
-  - Rumia falsa positiva por movimiento brusco
-  - Animal sano con RMSSD bajo por estrés (confunde al modelo)
-  - Subclinica con remisión parcial (baja la fiebre un rato)
-  - GPS congelado (misma posición varios registros seguidos)
-  - Vocalización en cluster (varias seguidas, no aisladas)
-
-Referencias:
-  Khatun et al. (2017), Fogsgaard et al. (2012),
-  Hogeveen et al. (2011), Radostits et al. (2007)
-"""
+##SE USA PARA CREAR DATOS SINTENTICOS PARA ENTRENAR AL MODELO.
 
 import numpy as np
 import pandas as pd
@@ -32,7 +10,7 @@ np.random.seed(42)
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
-N_DIAS = 30
+N_DIAS = 20
 IVMIN  = 5
 NR     = (N_DIAS * 24 * 60) // IVMIN   # 864 registros/animal
 

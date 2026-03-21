@@ -13,7 +13,7 @@ class ReadingController:
         if reading is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Cow or collar not found",
+                detail="Collar not found, collar without assigned cow, or assigned cow not found",
             )
         return reading
 

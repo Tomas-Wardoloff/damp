@@ -29,7 +29,10 @@ def _resolve_model_path() -> Path:
 
 
 def _extract_predictor(loaded_obj: Any) -> Any:
+    metadata: dict[str, Any] = {}
+
     if isinstance(loaded_obj, dict):
+        metadata = loaded_obj
         for key in ("model", "estimator", "clf", "classifier"):
             candidate = loaded_obj.get(key)
             if candidate is not None:
@@ -38,6 +41,13 @@ def _extract_predictor(loaded_obj: Any) -> Any:
 
     if not hasattr(loaded_obj, "predict"):
         raise TypeError("Loaded model object does not implement predict()")
+
+    # Attach optional metadata so predictor can replicate training features.
+    setattr(loaded_obj, "_damp_feature_names", metadata.get("feature_names"))
+    setattr(loaded_obj, "_damp_numeric_features", metadata.get("numeric_features"))
+    setattr(loaded_obj, "_damp_bool_features", metadata.get("bool_features"))
+    setattr(loaded_obj, "_damp_window_size", metadata.get("window_size"))
+    setattr(loaded_obj, "_damp_label_encoder", metadata.get("label_encoder"))
 
     return loaded_obj
 

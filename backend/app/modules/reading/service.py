@@ -12,12 +12,15 @@ class ReadingService:
         self.db = db
 
     def create(self, payload: ReadingCreate) -> Reading | None:
-        cow = self.db.scalar(select(Cow).where(Cow.id == payload.cow_id))
         collar = self.db.scalar(select(Collar).where(Collar.id == payload.collar_id))
-        if cow is None or collar is None:
+        if collar is None or collar.assigned_cow_id is None:
             return None
 
-        reading = Reading(**payload.model_dump())
+        cow = self.db.scalar(select(Cow).where(Cow.id == collar.assigned_cow_id))
+        if cow is None:
+            return None
+
+        reading = Reading(**payload.model_dump(), cow_id=collar.assigned_cow_id)
         self.db.add(reading)
         self.db.commit()
         self.db.refresh(reading)

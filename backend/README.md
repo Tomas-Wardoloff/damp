@@ -84,9 +84,15 @@ Apply migrations:
 
 ### Health / AI
 
-- POST /health/analyze/{cow_id}
-- GET /health/status/{cow_id}
+- POST /health/analyze/{cow_id}?limit=5
+- GET /health/status/{cow_id}?limit=5
 - GET /health/history/{cow_id}
+
+`POST /health/analyze/{cow_id}` takes the latest `limit` readings (default 5), sends them to:
+
+`POST https://damp-machine-learning.onrender.com/predict`
+
+and stores the returned status in `health_analyses`.
 
 ## Example Requests
 
@@ -121,7 +127,6 @@ curl -X POST http://127.0.0.1:8000/readings \
   -H "Content-Type: application/json" \
   -d '{
     "timestamp": "2026-03-20T19:10:00Z",
-    "cow_id": 1,
     "collar_id": 1,
     "temperatura_corporal_prom": 38.7,
     "hubo_rumia": true,
