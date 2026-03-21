@@ -58,6 +58,12 @@ export default function ConfiguracionPage() {
     return `${minutes}m ${remSeconds}s`;
   }, [runtime]);
 
+  const runningLabel = runtime?.running ? "Sí" : "No";
+  const cycleSummary =
+    cycleMinutes === 1
+      ? "El sistema renovará los datos cada 1 minuto."
+      : `El sistema renovará los datos cada ${cycleMinutes} minutos.`;
+
   async function handleSave() {
     setIsSaving(true);
     setMessage("");
@@ -69,7 +75,7 @@ export default function ConfiguracionPage() {
 
     const updated = await updateHealthSchedulerConfig(payload);
     if (!updated) {
-      setMessage("No se pudo guardar la configuracion del scheduler.");
+      setMessage("No se pudo guardar la configuración de actualización automática.");
       setIsSaving(false);
       return;
     }
@@ -81,7 +87,7 @@ export default function ConfiguracionPage() {
     const runtimeInfo = await getHealthSchedulerRuntime();
     setRuntime(runtimeInfo as SchedulerRuntime | null);
 
-    setMessage("Configuracion guardada.");
+    setMessage("Configuración guardada correctamente.");
     setIsSaving(false);
   }
 
@@ -92,10 +98,10 @@ export default function ConfiguracionPage() {
       <div className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl space-y-4">
           <section className="glass-panel rounded-xl border border-outline-variant/30 p-5">
-            <h2 className="text-headline-md mb-2">Scheduler de Health Check</h2>
+            <h2 className="text-headline-md mb-2">Configuración de actualización automática</h2>
             <p className="text-body-md text-on-surface-variant">
-              Define cada cuanto tiempo total queres actualizar a todas las vacas. El backend distribuye
-              automaticamente las consultas para no dispararlas todas juntas.
+              Elegí cada cuánto tiempo querés que se actualice el estado de salud de tus vacas.
+              El sistema se encarga solo de revisar y refrescar la información.
             </p>
           </section>
 
@@ -103,14 +109,14 @@ export default function ConfiguracionPage() {
             {isLoading ? (
               <div className="flex items-center gap-3 text-on-surface-variant">
                 <Activity className="w-5 h-5 animate-spin text-primary" />
-                Cargando configuracion...
+                Cargando configuración...
               </div>
             ) : (
               <>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-label-sm text-on-surface-variant">Estado del cron</p>
-                    <p className="text-body-md">Activar/pausar ejecucion automatica</p>
+                    <p className="text-label-sm text-on-surface-variant">Actualización automática</p>
+                    <p className="text-body-md">Activar o pausar ejecución automática</p>
                   </div>
                   <label className="inline-flex items-center gap-3 cursor-pointer">
                     <input
@@ -119,13 +125,13 @@ export default function ConfiguracionPage() {
                       onChange={(event) => setEnabled(event.target.checked)}
                       className="h-5 w-5"
                     />
-                    <span className="text-body-md font-semibold">{enabled ? "ACTIVO" : "PAUSADO"}</span>
+                    <span className="text-body-md font-semibold">{enabled ? "Activo" : "Pausado"}</span>
                   </label>
                 </div>
 
                 <div>
                   <label htmlFor="cycle-minutes" className="text-label-sm text-on-surface-variant">
-                    Ventana total de actualizacion (minutos)
+                    Cada cuánto actualizar (minutos)
                   </label>
                   <div className="mt-2 flex items-center gap-3">
                     <Clock3 className="w-4 h-4 text-on-surface-variant" />
@@ -145,7 +151,7 @@ export default function ConfiguracionPage() {
                       className="w-32 rounded-md border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-md"
                     />
                     <span className="text-body-md text-on-surface-variant">
-                      Ejemplo: 60 min = repartir updates de todas las vacas dentro de 1 hora.
+                      {cycleSummary}
                     </span>
                   </div>
                 </div>
@@ -157,21 +163,21 @@ export default function ConfiguracionPage() {
                   className="btn-primary gap-2 disabled:opacity-70"
                 >
                   <Save className="w-4 h-4" />
-                  {isSaving ? "Guardando..." : "Guardar configuracion"}
+                  {isSaving ? "Guardando..." : "Guardar configuración"}
                 </button>
 
                 <div className="pt-3 border-t border-outline-variant/30 space-y-2 text-body-md text-on-surface-variant">
                   <p>
-                    Ultima configuracion: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "N/A"}
+                    Última configuración: {lastUpdatedAt ? new Date(lastUpdatedAt).toLocaleString() : "Sin datos"}
                   </p>
                   <p>
-                    Scheduler corriendo: {runtime?.running ? "SI" : "NO"}
+                    Actualización automática activa: {runningLabel}
                   </p>
                   <p>
-                    Proximo espaciado estimado por vaca: {perCowHint}
+                    Tiempo estimado por vaca: {perCowHint}
                   </p>
                   <p>
-                    Ultima ejecucion del cron: {runtime?.last_execution_at ? new Date(runtime.last_execution_at).toLocaleString() : "N/A"}
+                    Última actualización: {runtime?.last_execution_at ? new Date(runtime.last_execution_at).toLocaleString() : "Sin datos"}
                   </p>
                   {message ? <p className="text-primary font-semibold">{message}</p> : null}
                 </div>

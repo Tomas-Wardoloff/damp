@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
 
 export type HerdMapPoint = {
@@ -21,18 +22,23 @@ interface HerdGeoMapClientProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  SANA: "#22c55e",
-  SUBCLINICA: "#f59e0b",
-  CLINICA: "#ef4444",
+  SANA: "#16a34a",
   MASTITIS: "#dc2626",
-  CELO: "#3b82f6",
-  FEBRIL: "#f97316",
-  DIGESTIVO: "#eab308",
+  CELO: "#ec4899",
+  FEBRIL: "#eab308",
+  DIGESTIVO: "#f97316",
 };
 
+function normalizeDisplayedStatus(status: string | null): string | null {
+  if (!status) return null;
+  if (status === "SUBCLINICA" || status === "CLINICA") return "MASTITIS";
+  return status;
+}
+
 function getColor(status: string | null): string {
-  if (!status) return "#94a3b8";
-  return STATUS_COLORS[status] || "#94a3b8";
+  const normalized = normalizeDisplayedStatus(status);
+  if (!normalized) return "#94a3b8";
+  return STATUS_COLORS[normalized] || "#94a3b8";
 }
 
 function getCenter(points: HerdMapPoint[]): [number, number] {
@@ -46,6 +52,33 @@ function getCenter(points: HerdMapPoint[]): [number, number] {
   );
 
   return [sum.lat / points.length, sum.lng / points.length];
+}
+
+function formatStatus(status: string | null): string {
+  const normalized = normalizeDisplayedStatus(status);
+  if (!normalized) return "Sin datos";
+
+  const labels: Record<string, string> = {
+    SANA: "Sana",
+    MASTITIS: "Mastitis",
+    CELO: "Celo",
+    FEBRIL: "Febril",
+    DIGESTIVO: "Digestivo",
+  };
+
+  return labels[normalized] || normalized;
+}
+
+function formatPercentage(value: number | null): string {
+  if (typeof value !== "number") return "sin dato";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function getConfidenceColor(value: number | null): string {
+  if (typeof value !== "number") return "#334155";
+  const clamped = Math.max(0, Math.min(1, value));
+  const hue = clamped * 120;
+  return `hsl(${hue} 78% 42%)`;
 }
 
 export function HerdGeoMapClient({ points }: HerdGeoMapClientProps) {
@@ -67,6 +100,12 @@ export function HerdGeoMapClient({ points }: HerdGeoMapClientProps) {
 
       {points.map((point) => {
         const color = getColor(point.healthStatus);
+        const hasConfidence = typeof point.confidence === "number";
+        const confidenceColor = getConfidenceColor(point.confidence);
+        const certaintyText = hasConfidence
+          ? `${(Number(point.confidence) * 100).toFixed(1)}%`
+          : "Sin datos";
+        const helpText = `Certeza (%)\nMuestra qué tan segura es la evaluación.\nSe calcula con las mediciones de las últimas 8 horas y su consistencia.\nUn valor alto indica señales claras; uno bajo, señales mezcladas.\n\nEstado primario\nEs el estado más probable según el análisis de esas mediciones.\n\nEstado secundario\nEs la segunda opción más probable y funciona como alternativa cercana.`;
         return (
           <CircleMarker
             key={`${point.cowId}-${point.timestamp}`}
@@ -80,31 +119,69 @@ export function HerdGeoMapClient({ points }: HerdGeoMapClientProps) {
             }}
           >
             <Popup>
-              <div className="text-sm">
-                <div><strong>Vaca #{point.cowId}</strong></div>
-                <div>Estado: {point.healthStatus || "SIN DATOS"}</div>
-                <div>
-                  Confianza:{" "}
-                  {point.confidence === null
-                    ? "N/A"
-                    : `${(point.confidence * 100).toFixed(1)}%`}
+              <div className="relative text-sm min-w-55 space-y-3">
+                <span className="absolute left-0 top-0 z-10 inline-flex items-center group">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-help">
+                    ?
+                  </span>
+                  <span className="pointer-events-none absolute left-0 top-full z-9999 mt-2 w-72 rounded-md bg-slate-900 px-3 py-2 text-[11px] font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100 whitespace-pre-line">
+                    {helpText}
+                  </span>
+                </span>
+
+                <div className="flex items-center justify-between gap-2">
+                  <strong className="pl-6">Vaca #{point.cowId}</strong>
+                  <span
+                    className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                    style={{ backgroundColor: color }}
+                  >
+                    {formatStatus(point.healthStatus)}
+                  </span>
                 </div>
-                <div>
-                  Primario: {point.primaryStatus || "N/A"}
-                  {point.primaryConfidence === null ? "" : ` (${(point.primaryConfidence * 100).toFixed(1)}%)`}
+
+                <div className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50/80 px-2 ">
+                  <p className="text-sm font-extrabold text-slate-700">Certeza</p>
+                  <p className="text-sm font-semibold" style={{ color: confidenceColor }}>
+                    {certaintyText}
+                  </p>
                 </div>
-                <div>
-                  Secundario: {point.secondaryStatus || "N/A"}
-                  {point.secondaryConfidence === null ? "" : ` (${(point.secondaryConfidence * 100).toFixed(1)}%)`}
+
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Evaluación</p>
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1.5">
+                    <span className="text-slate-600">Estado primario</span>
+                    <span className="font-semibold text-slate-900">
+                      {formatStatus(point.primaryStatus)} ({formatPercentage(point.primaryConfidence)})
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1.5">
+                    <span className="text-slate-600">Estado secundario</span>
+                    <span className="font-medium text-slate-800">
+                      {formatStatus(point.secondaryStatus)} ({formatPercentage(point.secondaryConfidence)})
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  Ult. prediccion:{" "}
-                  {point.healthCreatedAt
-                    ? new Date(point.healthCreatedAt).toLocaleString()
-                    : "SIN PREDICCION"}
+
+                <div className="space-y-1 text-xs text-slate-500">
+                  <div>
+                    Última lectura: {new Date(point.timestamp).toLocaleString()}
+                  </div>
+                  <div>
+                    Último análisis:{" "}
+                    {point.healthCreatedAt
+                      ? new Date(point.healthCreatedAt).toLocaleString()
+                      : "Sin análisis"}
+                  </div>
                 </div>
-                <div>Lat: {point.lat.toFixed(6)}</div>
-                <div>Lng: {point.lng.toFixed(6)}</div>
+
+                <div className="pt-1">
+                  <Link
+                    href={`/animal/${point.cowId}`}
+                    className="inline-flex items-center rounded-md border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 transition-colors"
+                  >
+                    Ver detalle
+                  </Link>
+                </div>
               </div>
             </Popup>
           </CircleMarker>

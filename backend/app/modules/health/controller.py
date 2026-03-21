@@ -8,7 +8,7 @@ class HealthController:
     async def analyze(self, cow_id: int, limit: int | None = None):
         return await self.service.analyze(cow_id, limit=limit)
 
-    async def status(self, cow_id: int, limit: int | None = None):
+    async def status(self, cow_id: int):
         return await self.service.status(cow_id)
 
     def history(self, cow_id: int):

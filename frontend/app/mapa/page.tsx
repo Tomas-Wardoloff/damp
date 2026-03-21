@@ -18,14 +18,54 @@ const DEFAULT_REFRESH_SECONDS = Number(
 );
 
 const STATUS_COLORS: Record<string, string> = {
-  SANA: "#22c55e",
-  SUBCLINICA: "#f59e0b",
-  CLINICA: "#ef4444",
+  SANA: "#16a34a",
   MASTITIS: "#dc2626",
-  CELO: "#3b82f6",
-  FEBRIL: "#f97316",
-  DIGESTIVO: "#eab308",
+  CELO: "#ec4899",
+  FEBRIL: "#eab308",
+  DIGESTIVO: "#f97316",
 };
+
+const STATUS_BRIEF: Record<string, string[]> = {
+  SANA: [
+    "todo en rango normal",
+  ],
+  MASTITIS: [
+    "temperatura alta",
+    "movimiento bajo",
+    "variabilidad cardíaca baja",
+  ],
+  CELO: [
+    "movimiento muy alto",
+    "actividad nocturna marcada",
+    "temperatura cercana a normal",
+  ],
+  FEBRIL: [
+    "temperatura alta",
+    "movimiento casi normal",
+  ],
+  DIGESTIVO: [
+    "rumia muy baja",
+    "movimiento bajo",
+    "temperatura moderada",
+  ],
+};
+
+function normalizeDisplayedStatus(status: string | null): string | null {
+  if (!status) return null;
+  if (status === "SUBCLINICA" || status === "CLINICA") return "MASTITIS";
+  return status;
+}
+
+function formatStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    SANA: "SANA",
+    MASTITIS: "MASTITIS",
+    CELO: "CELO",
+    FEBRIL: "FEBRIL",
+    DIGESTIVO: "DIGESTIVO",
+  };
+  return labels[status] || status;
+}
 
 function toNumber(value: unknown): number | null {
   const numeric = typeof value === "number" ? value : Number(value);
@@ -95,9 +135,11 @@ export default function MapaRodeoPage() {
               effectiveConfidence = secondaryConfidence;
             }
 
+            const normalizedStatus = normalizeDisplayedStatus(effectiveStatus);
+
             return {
               cowId,
-              effectiveStatus,
+              effectiveStatus: normalizedStatus,
               effectiveConfidence,
               primaryStatus,
               primaryConfidence,
@@ -177,8 +219,6 @@ export default function MapaRodeoPage() {
   const statusLegend = useMemo(
     () => [
       { key: "SANA", color: STATUS_COLORS.SANA },
-      { key: "SUBCLINICA", color: STATUS_COLORS.SUBCLINICA },
-      { key: "CLINICA", color: STATUS_COLORS.CLINICA },
       { key: "MASTITIS", color: STATUS_COLORS.MASTITIS },
       { key: "CELO", color: STATUS_COLORS.CELO },
       { key: "FEBRIL", color: STATUS_COLORS.FEBRIL },
@@ -204,7 +244,7 @@ export default function MapaRodeoPage() {
           <div className="flex items-center gap-3">
             <Clock3 className="w-4 h-4 text-on-surface-variant" />
             <label htmlFor="refresh-seconds" className="text-label-sm text-on-surface-variant">
-              Refresh (seg)
+              Actualización (seg)
             </label>
             <input
               id="refresh-seconds"
@@ -223,14 +263,14 @@ export default function MapaRodeoPage() {
             />
             <span className="text-label-sm text-on-surface-variant">
               {lastFetchTime
-                ? `Ultima actualizacion: ${lastFetchTime.toLocaleTimeString()}`
-                : "Sin datos aun"}
+                ? `Última actualización: ${lastFetchTime.toLocaleTimeString()}`
+                : "Sin datos aún"}
             </span>
           </div>
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 min-h-0 flex-1">
-          <div className="rounded-xl border border-outline-variant/30 overflow-hidden bg-surface-container min-h-[420px]">
+          <div className="rounded-xl border border-outline-variant/30 overflow-hidden bg-surface-container min-h-105">
             {isLoading ? (
               <div className="h-full flex items-center justify-center gap-3 text-on-surface-variant">
                 <Activity className="w-6 h-6 animate-spin text-primary" />
@@ -248,23 +288,32 @@ export default function MapaRodeoPage() {
           <aside className="glass-panel rounded-xl border border-outline-variant/30 p-4 overflow-y-auto">
             <h3 className="text-headline-md mb-4">Leyenda de estados</h3>
             <p className="text-body-md text-on-surface-variant mb-3">
-              El color de cada punto representa la ultima prediccion guardada para ese animal.
+              El color de cada punto representa el último análisis guardado para ese animal.
             </p>
-            <div className="space-y-3">
+            <ul className="space-y-2">
               {statusLegend.map((item) => (
-                <div key={item.key} className="flex items-center gap-3">
-                  <span
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-body-md">{item.key}</span>
-                </div>
+                <li key={item.key} className="list-none">
+                  <details className="rounded-md border border-outline-variant/30 bg-surface-container p-2">
+                    <summary className="flex items-center gap-3 cursor-pointer list-none">
+                      <span
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-body-md font-medium">{formatStatusLabel(item.key)}</span>
+                    </summary>
+                    <ul className="mt-2 pl-4 list-disc space-y-1 text-label-sm text-on-surface-variant">
+                      {STATUS_BRIEF[item.key].map((detail) => (
+                        <li key={`${item.key}-${detail}`}>{detail}</li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
               ))}
-              <div className="flex items-center gap-3">
+              <li className="list-none flex items-center gap-3 px-2 py-1">
                 <span className="w-3 h-3 rounded-full bg-slate-400" />
-                <span className="text-body-md">SIN DATOS</span>
-              </div>
-            </div>
+                <span className="text-body-md">sin datos</span>
+              </li>
+            </ul>
           </aside>
         </section>
       </div>

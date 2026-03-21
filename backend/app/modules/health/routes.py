@@ -38,11 +38,10 @@ async def analyze_cow_health(
 @router.get("/status/{cow_id}", response_model=HealthAnalysisResponse | None)
 async def get_latest_health_status(
     cow_id: int,
-    limit: int = Query(default=settings.health_window_size, ge=1, le=500),
     db: Session = Depends(get_db),
 ) -> HealthAnalysisResponse | None:
     controller = HealthController(HealthService(db=db, ai_client=AIClient()))
-    return await controller.status(cow_id, limit=limit)
+    return await controller.status(cow_id)
 
 
 @router.get("/history/{cow_id}", response_model=list[HealthAnalysisResponse])
