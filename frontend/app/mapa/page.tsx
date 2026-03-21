@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Activity, Clock3, MapPin } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { getLatestHealthByHistory, getLatestReadings } from "@/lib/api";
+import { getLatestHealthByHistory, getLatestReadings, parseApiDateMs } from "@/lib/api";
 import type { HerdMapPoint } from "@/components/dashboard/HerdGeoMapClient";
 
 const HerdGeoMapClient = dynamic(
@@ -86,8 +86,8 @@ export default function MapaRodeoPage() {
       const validReadings = latestReadings.filter((reading) => {
         const lat = toNumber(reading?.latitud);
         const lng = toNumber(reading?.longitud);
-        const ts = Date.parse(String(reading?.timestamp ?? ""));
-        return lat !== null && lng !== null && Number.isFinite(ts) && ts <= nowMs;
+        const ts = parseApiDateMs(reading?.timestamp);
+        return lat !== null && lng !== null && ts !== null && ts <= nowMs;
       });
 
       const uniqueCowIds = Array.from(

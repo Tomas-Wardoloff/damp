@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { MapContainer, TileLayer, CircleMarker, Popup } from "react-leaflet";
+import { formatApiDateTime } from "@/lib/api";
 
 export type HerdMapPoint = {
   cowId: number;
@@ -164,12 +165,12 @@ export function HerdGeoMapClient({ points }: HerdGeoMapClientProps) {
 
                 <div className="space-y-1 text-xs text-slate-500">
                   <div>
-                    Última lectura: {new Date(point.timestamp).toLocaleString()}
+                    Última lectura: {formatApiDateTime(point.timestamp)}
                   </div>
                   <div>
                     Último análisis:{" "}
                     {point.healthCreatedAt
-                      ? new Date(point.healthCreatedAt).toLocaleString()
+                      ? formatApiDateTime(point.healthCreatedAt)
                       : "Sin análisis"}
                   </div>
                 </div>

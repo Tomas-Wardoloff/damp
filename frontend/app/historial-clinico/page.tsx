@@ -12,7 +12,7 @@ import {
 } from "recharts";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { getClinicalHistory } from "@/lib/api";
+import { getClinicalHistory, parseApiDateMs } from "@/lib/api";
 
 type ClinicalPoint = {
   created_at: string;
@@ -151,13 +151,16 @@ export default function HistorialClinicoPage() {
             {cows.map((cow) => {
               const chartData = cow.points.map((point) => {
                 const normalized = normalizeStatus(point.status);
+                const parsedMs = parseApiDateMs(point.created_at);
                 return {
-                  x: new Date(point.created_at).toLocaleString([], {
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
+                  x: parsedMs === null
+                    ? "N/A"
+                    : new Date(parsedMs).toLocaleString([], {
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
                   y: STATUS_TO_LEVEL[normalized] ?? 0,
                   status: normalized,
                   confidence: point.confidence,

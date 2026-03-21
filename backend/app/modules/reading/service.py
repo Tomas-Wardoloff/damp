@@ -64,20 +64,22 @@ class ReadingService:
 
     def list_latests(self) -> list[Reading]:
         now_utc = datetime.utcnow()
-        latest_ranked = select(
-            Reading.id.label("reading_id"),
-            func.row_number()
-            .over(
-                partition_by=Reading.cow_id,
-                order_by=(Reading.timestamp.desc(), Reading.id.desc()),
-            )
-            .label("row_num"),
-        ).where(Reading.timestamp <= now_utc).subquery()
+        cow_ids_stmt = select(Cow.id).order_by(Cow.id.asc())
+        cow_ids = list(self.db.scalars(cow_ids_stmt).all())
 
-        stmt = (
-            select(Reading)
-            .join(latest_ranked, Reading.id == latest_ranked.c.reading_id)
-            .where(latest_ranked.c.row_num == 1)
-            .order_by(Reading.cow_id.asc())
-        )
-        return list(self.db.scalars(stmt).all())
+        items: list[Reading] = []
+        for cow_id in cow_ids:
+            latest_stmt = (
+                select(Reading)
+                .where(
+                    Reading.cow_id == cow_id,
+                    Reading.timestamp <= now_utc,
+                )
+                .order_by(Reading.timestamp.desc(), Reading.id.desc())
+                .limit(1)
+            )
+            latest = self.db.scalar(latest_stmt)
+            if latest is not None:
+                items.append(latest)
+
+        return items

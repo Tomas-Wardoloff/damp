@@ -94,10 +94,35 @@ function normalizeCowStatus(status: string | undefined): string {
   return status;
 }
 
+export function parseApiDateMs(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const hasTimezone = /(?:Z|[+\-]\d{2}:\d{2})$/i.test(trimmed);
+  const isoValue = hasTimezone ? trimmed : `${trimmed}Z`;
+  const parsed = Date.parse(isoValue);
+
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function formatApiDateTime(value: unknown): string {
+  const parsedMs = parseApiDateMs(value);
+  if (parsedMs === null) return "N/A";
+
+  return new Date(parsedMs).toLocaleString([], {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function isNotFutureDate(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && parsed <= Date.now();
+  const parsed = parseApiDateMs(value);
+  return parsed !== null && parsed <= Date.now();
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -336,15 +361,7 @@ export async function fetchDashboardData(): Promise<{
           distance: reading?.metros_recorridos
             ? Math.round(reading.metros_recorridos)
             : "--",
-          lastUpdated: reading?.timestamp
-            ? new Date(reading.timestamp).toLocaleString([], {
-                year: "numeric",
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "N/A",
+          lastUpdated: formatApiDateTime(reading?.timestamp),
         } satisfies Animal;
       }),
     );
@@ -379,13 +396,19 @@ export async function fetchAnimalDetail(idString: string) {
   const validReadings = rawReadings.filter((r: any) => isNotFutureDate(r?.timestamp));
 
   const chartData = validReadings
-    .map((r: any) => ({
-      time: new Date(r.timestamp).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-      value: r.temperatura_corporal_prom,
-    }))
+    .map((r: any) => {
+      const parsedMs = parseApiDateMs(r.timestamp);
+      if (parsedMs === null) return null;
+
+      return {
+        time: new Date(parsedMs).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        value: r.temperatura_corporal_prom,
+      };
+    })
+    .filter((item: { time: string; value: number } | null): item is { time: string; value: number } => item !== null)
     .reverse();
 
   const latestReading = validReadings.length > 0 ? validReadings[0] : null;
@@ -419,15 +442,7 @@ export async function fetchAnimalDetail(idString: string) {
     rmssd: latestReading?.rmssd || 0,
     sdnn: latestReading?.sdnn || 0,
     vocalization: latestReading?.hubo_vocalizacion ?? false,
-    lastUpdated: latestReading?.timestamp
-      ? new Date(latestReading.timestamp).toLocaleString([], {
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-      : "N/A",
+    lastUpdated: formatApiDateTime(latestReading?.timestamp),
   };
 
   return {
