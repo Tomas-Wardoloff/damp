@@ -10,8 +10,8 @@ import { DiagnosisPanel } from "@/components/animal/DiagnosisPanel"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
-// Keep mock generator just for filling chart if DB has no historical data yet
-import { generateBiometricData } from "@/lib/mock-data"
+import { HealthHistoryTimeline } from "@/components/animal/HealthHistoryTimeline"
+import { CowStatus } from "@/types"
 
 export default function AnimalDetail() {
   const router = useRouter()
@@ -57,9 +57,24 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus } = data
-  const isCritical = animal.status === "critical"
-  const biometricsStatus = isCritical ? "high" as const : "normal" as const
+  const { animal, chartData, healthStatus, healthHistory } = data
+
+  function formatTimeInSystem(dateString: string) {
+    if (!dateString) return "Desconocido";
+    const start = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays < 30) return `${diffDays} días`;
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) return `${diffMonths} meses`;
+    return `${Math.floor(diffMonths / 12)} años`;
+  }
+  function getStressLevel(rmssd: number, sdnn: number) {
+    if (rmssd < 20 || sdnn < 30) return { value: "Elevado", status: "high" as const };
+    if (rmssd < 40 || sdnn < 50) return { value: "Moderado", status: "warning" as const };
+    return { value: "Normal", status: "normal" as const };
+  }
 
   const biometrics = {
     temperature: { value: animal.temperature, status: biometricsStatus },
@@ -133,6 +148,10 @@ export default function AnimalDetail() {
             confidence={confPercent}
             recommendation={recomStr}
           />
+        </section>
+
+        <section className="mt-4">
+          <HealthHistoryTimeline history={healthHistory} />
         </section>
       </div>
     </div>
