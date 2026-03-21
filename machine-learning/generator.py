@@ -38,10 +38,10 @@ RODEO = {
 # PARÁMETROS BASE — animal sano
 # ─────────────────────────────────────────────
 BASE = {
-    "temp":    38.6, "temp_s":   0.55,
-    "hr":      65.0, "hr_s":    11.0,
-    "rmssd":   40.0, "rmssd_s": 13.0,
-    "vel":      1.7, "vel_s":    1.00,
+    "temp":    38.6, "temp_s":   0.70,   # era 0.55 — más overlap
+    "hr":      65.0, "hr_s":    13.0,   # era 11.0
+    "rmssd":   40.0, "rmssd_s": 15.0,   # era 13.0
+    "vel":      1.7, "vel_s":    1.20,  # era 1.00
     "p_rumia": 0.52,
     "p_vocal": 0.07,
 }
@@ -57,36 +57,35 @@ DELTAS = {
         "max_prog": 0.0,
     },
     "subclinica": {
-        # RMSSD cae primero, temp sube leve, movimiento cae moderado
-        "temp": +1.0, "hr": +10.0, "rmssd": -14.0,
-        "vel": -0.55, "p_rumia": -0.22, "p_vocal": +0.10,
-        "max_prog": 0.55,   # nunca llega a mastitis
+        # Reducido: más overlap con sana, el modelo tiene que esforzarse
+        "temp": +0.7, "hr": +7.0, "rmssd": -10.0,
+        "vel": -0.40, "p_rumia": -0.16, "p_vocal": +0.07,
+        "max_prog": 0.55,
     },
     "mastitis": {
-        # Temp alta, RMSSD muy bajo, movimiento muy bajo, rumia casi cero
-        "temp": +1.8, "hr": +24.0, "rmssd": -26.0,
-        "vel": -1.10, "p_rumia": -0.42, "p_vocal": +0.20,
+        # Reducido: temp y RMSSD más cercanos a subclinica
+        "temp": +1.3, "hr": +18.0, "rmssd": -20.0,
+        "vel": -0.85, "p_rumia": -0.35, "p_vocal": +0.16,
         "max_prog": 1.0,
     },
     "celo": {
-        # Temp casi normal, HR sube leve, movimiento x3, rumia ok, vocal alta
-        # El celo es diferente: no es patológico, el movimiento es el feature clave
-        "temp": +0.2, "hr": +9.0, "rmssd": -4.0,
-        "vel": +2.8,  "p_rumia": -0.05, "p_vocal": +0.22,
+        # El movimiento sigue siendo el feature clave pero con más ruido
+        "temp": +0.2, "hr": +7.0, "rmssd": -3.0,
+        "vel": +2.2,  "p_rumia": -0.05, "p_vocal": +0.18,
         "max_prog": 1.0,
     },
     "febril": {
-        # Temp alta IGUAL que mastitis, PERO movimiento casi normal y RMSSD ok
-        # Eso es lo que distingue febril de mastitis
-        "temp": +1.7, "hr": +14.0, "rmssd": -8.0,
-        "vel": -0.25, "p_rumia": -0.15, "p_vocal": +0.10,
+        # Temp sube menos — más overlap con sana estresada
+        # Movimiento casi normal sigue siendo el discriminador vs mastitis
+        "temp": +1.2, "hr": +10.0, "rmssd": -6.0,
+        "vel": -0.20, "p_rumia": -0.10, "p_vocal": +0.08,
         "max_prog": 1.0,
     },
     "digestivo": {
-        # Rumia colapsa primero (feature clave), temp leve, movimiento bajo
-        # La rumia es el indicador más temprano y discriminante
-        "temp": +0.8, "hr": +16.0, "rmssd": -14.0,
-        "vel": -0.90, "p_rumia": -0.44, "p_vocal": +0.22,
+        # Rumia colapsa — ese es el único feature realmente discriminante
+        # Resto más overlap con otras clases
+        "temp": +0.6, "hr": +12.0, "rmssd": -10.0,
+        "vel": -0.70, "p_rumia": -0.40, "p_vocal": +0.18,
         "max_prog": 1.0,
     },
 }
@@ -140,11 +139,11 @@ def fase_from_prog(prog, clase):
 # ─────────────────────────────────────────────
 INICIO_BASE = {
     "sana":       NR + 1,   # nunca
-    "subclinica": 150,
-    "mastitis":   80,        # arranca antes para que se vea la progresión completa
-    "celo":       120,       # el celo arranca al mediodía aprox del día 1
-    "febril":     100,
-    "digestivo":  90,
+    "subclinica": 200,      # era 150 — más ticks iniciales como sana
+    "mastitis":   100,      # era 80
+    "celo":       150,      # era 120
+    "febril":     300,      # era 100 — arranca más tarde, más ventanas ambiguas
+    "digestivo":  120,      # era 90
 }
 
 # ─────────────────────────────────────────────
@@ -238,19 +237,38 @@ for clase, cfg in RODEO.items():
             # ── Factores circadianos ──────────────────────────
             fn = factor_nocturno(h)   # 0=día, 1=noche profunda
 
+            # ── Ruido cross-class (~5% registros) ─────────────
+            # Simula variabilidad real: sana con fiebre puntual,
+            # febril con momento de actividad, etc.
+            xc_temp = xc_hr = xc_rmssd = xc_vel = 0.0
+            if np.random.random() < 0.05:
+                evento = np.random.choice(["temp_up","temp_down","hr_up","rmssd_drop","rmssd_up","vel_spike"])
+                if evento == "temp_up":
+                    xc_temp = np.random.uniform(0.4, 1.1)   # fiebre puntual en sana
+                elif evento == "temp_down":
+                    xc_temp = -np.random.uniform(0.2, 0.6)  # temp baja en enferma
+                elif evento == "hr_up":
+                    xc_hr = np.random.uniform(6, 18)         # susto / estrés
+                elif evento == "rmssd_drop":
+                    xc_rmssd = -np.random.uniform(6, 15)     # estrés agudo
+                elif evento == "rmssd_up":
+                    xc_rmssd = np.random.uniform(5, 12)      # descanso profundo
+                elif evento == "vel_spike":
+                    xc_vel = np.random.uniform(0.5, 1.5)     # movimiento brusco
+
             # Temperatura — baja 0.25°C en noche profunda
             temp_circ = 0.1 * np.sin(2*np.pi*(h-6)/24) - fn * 0.25
-            temp = np.random.normal(temp_m, temp_s) + temp_circ + rc*0.08 + temp_extra
+            temp = np.random.normal(temp_m, temp_s) + temp_circ + rc*0.08 + temp_extra + xc_temp
             temp = np.nan if np.random.random() < 0.008 else round(float(np.clip(temp, 36.5, 42.5)), 2)
 
             # HR — baja 6-8 bpm de noche (sistema parasimpático domina)
             hr_circ = -fn * 7.0
-            hr = np.random.normal(hr_m + hr_circ, hr_s) + rc * 1.8 + hr_extra
+            hr = np.random.normal(hr_m + hr_circ, hr_s) + rc * 1.8 + hr_extra + xc_hr
             hr = round(float(np.random.uniform(38, 48)), 1) if np.random.random() < 0.010 \
                  else round(float(np.clip(hr, 38, 130)), 1)
 
             # HRV — RMSSD sube de noche (descanso = más variabilidad cardíaca)
-            rmssd_base = max(5.0, rmssd_m + fn * 8.0)
+            rmssd_base = max(5.0, rmssd_m + fn * 8.0 + xc_rmssd)
             if rmssd_bajo_cronico:
                 rmssd_base = max(5.0, rmssd_base - np.random.uniform(7, 13))
             rmssd = round(float(max(4.0, np.random.normal(rmssd_base, rmssd_s) - rc * 1.0)), 1)
@@ -270,10 +288,9 @@ for clase, cfg in RODEO.items():
                 prob_voc = min(prob_voc + 0.60, 1.0)
             hubo_vocal = int(np.random.random() < prob_voc)
 
-            # Velocidad — de noche casi cero (animales echados o muy quietos)
-            # El factor nocturno reduce la velocidad base, el circadiano la modula de día
-            vel_noche = max(0.0, vel_m * c * (1 - fn * 0.85))   # noche: ~15% de la vel diurna
-            vel = round(float(max(0.0, np.random.normal(vel_noche, vel_s * (1 - fn*0.5)))), 2)
+            # Velocidad — de noche casi cero, con ruido cross-class
+            vel_noche = max(0.0, vel_m * c * (1 - fn * 0.85))
+            vel = round(float(max(0.0, np.random.normal(vel_noche + xc_vel, vel_s * (1 - fn*0.5)))), 2)
             metros = round(vel * (IVMIN / 60) * 1000, 1)
 
             if gps_freeze_start > 0 and gps_freeze_start <= i < gps_freeze_start + gps_freeze_len:

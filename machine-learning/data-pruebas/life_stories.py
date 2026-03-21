@@ -56,9 +56,13 @@ def subclinica_temprana(i, n, h):
     return 38.7 + avance * 0.8, 66 + avance * 8, 38 - avance * 10, 1.4 - avance * 0.3, 0.85, 0.03
 
 def subclinica_progresando(i, n, h):
-    # Avance visible — empieza limítrofe con sana, termina claramente subclinica
+    # Avance visible desde el dia 1 — empieza limítrofe con sana
+    # El inicio más temprano garantiza que las ventanas capturen la progresión
     prog   = i / n
-    avance = sigmoide(prog * n, n * 0.3, 0.05) * 0.55
+    avance = sigmoide(prog * n, n * 0.08, 0.05) * 0.55
+    # Pequeña fluctuación — la subclinica no progresa linealmente
+    fluctuacion = math.sin(2 * math.pi * prog * 2) * 0.05
+    avance = clamp(avance + fluctuacion, 0, 0.60)
     return 38.8 + avance * 1.2, 67 + avance * 10, 37 - avance * 12, 1.3 - avance * 0.4, 0.75, 0.05
 
 # ── MASTITIS (ex-clínica) ─────────────────────
@@ -105,20 +109,27 @@ def celo_inicio(i, n, h):
 def febril_viral(i, n, h):
     """
     Fiebre sin foco (viral/respiratoria).
-    Temp alta como mastitis PERO movimiento casi normal y RMSSD ok.
-    La vaca sigue pastoreando — distinguible de mastitis por esta razón.
+    Arranca desde el primer dia — la ventana de 300 ticks debe ver la fiebre.
+    Temp alta, movimiento casi normal, RMSSD levemente bajo.
+    La vaca sigue pastoreando — distinguible de mastitis por el movimiento.
     """
-    prog  = i / n
-    pico  = sigmoide(prog * n, n * 0.3, 0.07) * 0.85
-    return 38.6 + pico * 1.8, 70 + pico * 12, 36 - pico * 6, 1.3 - pico * 0.3, 0.75, 0.08
+    prog = i / n
+    # Arranca al 5% del período (no al 30%) — así la ventana siempre captura la fiebre
+    pico = sigmoide(prog * n, n * 0.05, 0.06) * 0.85
+    # Temperatura sube clara pero movimiento casi normal — eso es la firma
+    return 38.6 + pico * 1.9, 70 + pico * 13, 36 - pico * 7, 1.35 - pico * 0.25, 0.72, 0.09
 
 def febril_moderado(i, n, h):
     """
-    Fiebre moderada — menos severa, más overlap con sana estresada.
+    Fiebre moderada con fluctuaciones — se confunde con sana estresada a veces.
+    Arranca antes para que el modelo lo vea en las ventanas de entrenamiento.
     """
     prog = i / n
-    pico = sigmoide(prog * n, n * 0.4, 0.05) * 0.55
-    return 38.6 + pico * 1.2, 68 + pico * 9, 37 - pico * 5, 1.4 - pico * 0.2, 0.85, 0.05
+    # Pico al 8% del período + fluctuación sinusoidal para simular fiebre intermitente
+    pico = sigmoide(prog * n, n * 0.08, 0.05) * 0.60
+    fluctuacion = math.sin(2 * math.pi * prog * 3) * 0.08  # ondas de fiebre
+    pico = clamp(pico + fluctuacion, 0, 0.7)
+    return 38.6 + pico * 1.3, 68 + pico * 10, 37 - pico * 6, 1.4 - pico * 0.2, 0.82, 0.06
 
 # ── DIGESTIVO ─────────────────────────────────
 def digestivo_acidosis(i, n, h):
@@ -207,16 +218,33 @@ def generar_vaca(cow_id, label, fn, personalidad, start, n):
 
         temp_m, hr_m, rmssd_m, vel_base, rum_factor, voc_extra = fn(i, n, h)
 
-        # Temperatura
-        temp = clamp(random.gauss(temp_m, 0.35) + rc * 0.07, 36.5, 42.5)
+        # ── Micro-eventos cross-class (~4% de registros) ────────────────
+        # Simulan variabilidad fisiológica real: una vaca sana puede tener
+        # un pico de temp, una febril puede tener un momento más activo
+        micro_temp  = 0.0
+        micro_hr    = 0.0
+        micro_rmssd = 0.0
+        if random.random() < 0.04:
+            tipo_micro = random.choice(["temp_spike","hr_spike","rmssd_drop","rmssd_up"])
+            if tipo_micro == "temp_spike":
+                micro_temp = random.uniform(0.3, 0.8)   # pico temporal de temp
+            elif tipo_micro == "hr_spike":
+                micro_hr = random.uniform(5, 15)         # susto, movimiento brusco
+            elif tipo_micro == "rmssd_drop":
+                micro_rmssd = -random.uniform(5, 12)     # estrés puntual
+            elif tipo_micro == "rmssd_up":
+                micro_rmssd = random.uniform(4, 10)      # descanso profundo
+
+        # Temperatura — std más alto para más overlap entre clases
+        temp = clamp(random.gauss(temp_m, 0.45) + rc * 0.08 + micro_temp, 36.5, 42.5)
         temp = None if random.random() < 0.008 else round(temp, 2)
 
         # HR — artefacto de movimiento brusco ~1%
-        hr = clamp(random.gauss(hr_m, 6.0) + rc * 1.5, 38, 130)
+        hr = clamp(random.gauss(hr_m, 7.0) + rc * 1.5 + micro_hr, 38, 130)
         hr = round(random.uniform(38, 48) if random.random() < 0.010 else hr, 1)
 
-        # HRV
-        rmssd = round(max(4.0, random.gauss(max(5.0, rmssd_m), 5.0) - rc * 0.8), 2)
+        # HRV — std más alto para más overlap
+        rmssd = round(max(4.0, random.gauss(max(5.0, rmssd_m), 6.5) - rc * 0.8 + micro_rmssd), 2)
         sdnn  = round(max(rmssd * 1.05, rmssd * random.uniform(1.1, 1.45)), 2)
 
         # Rumia — modulada por el rum_factor de la personalidad
