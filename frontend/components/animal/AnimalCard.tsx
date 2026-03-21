@@ -21,11 +21,11 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
   const normStatus = animal.status?.toLowerCase() as string;
   const statusBorderColor = {
     sana: "border-primary/20 hover:border-primary/50",
-    subclinica: "border-secondary/30 hover:border-secondary/60",
-    clinica: "border-tertiary/40 hover:border-tertiary/80",
-    mastitis: "border-tertiary/40 hover:border-tertiary/80",
-    febril: "border-secondary/30 hover:border-secondary/60",
-    digestivo: "border-secondary/30 hover:border-secondary/60",
+    subclinica: "border-amber-500/30 hover:border-amber-500/60",
+    clinica: "border-red-500/40 hover:border-red-500/80",
+    mastitis: "border-red-500/40 hover:border-red-500/80",
+    febril: "border-amber-500/30 hover:border-amber-500/60",
+    digestivo: "border-orange-500/30 hover:border-orange-500/60",
     celo: "border-blue-500/30 hover:border-blue-500/60",
     "sin datos": "border-outline-variant/50 hover:border-outline-variant",
   }[normStatus] || "border-outline-variant/50 hover:border-outline-variant"
@@ -74,10 +74,13 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
       </div>
 
       {normStatus === 'clinica' || normStatus === 'mastitis' ? (
-        <div className="absolute inset-0 bg-tertiary/5 pointer-events-none rounded-lg animate-pulse" />
+        <div className="absolute inset-0 bg-red-500/5 pointer-events-none rounded-lg animate-pulse" />
       ) : null}
-      {normStatus === 'subclinica' || normStatus === 'febril' || normStatus === 'digestivo' ? (
-        <div className="absolute inset-0 bg-secondary/5 pointer-events-none rounded-lg" />
+      {normStatus === 'subclinica' || normStatus === 'febril' ? (
+        <div className="absolute inset-0 bg-amber-500/5 pointer-events-none rounded-lg" />
+      ) : null}
+      {normStatus === 'digestivo' ? (
+        <div className="absolute inset-0 bg-orange-500/5 pointer-events-none rounded-lg" />
       ) : null}
     </div>
   )

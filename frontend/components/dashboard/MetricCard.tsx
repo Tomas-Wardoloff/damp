@@ -20,53 +20,53 @@ export function MetricCard({ title, value, subtitle, status = "neutral", classNa
       glow: null
     },
     sana: {
-      text: "text-[#16a34a]",
-      bg: "bg-[#16a34a]/12",
-      border: "border-[#16a34a]/35",
-      accent: "bg-[#16a34a]",
-      glow: "bg-[#16a34a]/18"
+      text: "text-primary",
+      bg: "bg-primary-container/12",
+      border: "border-primary/35",
+      accent: "bg-primary",
+      glow: "bg-primary/18"
     },
     subclinica: {
-      text: "text-secondary",
-      bg: "bg-secondary-container/10",
-      border: "border-secondary/30",
-      accent: "bg-secondary",
-      glow: "bg-secondary/15"
+      text: "text-amber-500",
+      bg: "bg-amber-500/12",
+      border: "border-amber-500/35",
+      accent: "bg-amber-500",
+      glow: "bg-amber-500/15"
     },
     clinica: {
-      text: "text-tertiary",
-      bg: "bg-tertiary-container/10",
-      border: "border-tertiary/40",
-      accent: "bg-tertiary",
-      glow: "bg-tertiary/20"
+      text: "text-red-500",
+      bg: "bg-red-500/12",
+      border: "border-red-500/35",
+      accent: "bg-red-500",
+      glow: "bg-red-500/20"
     },
     mastitis: {
-      text: "text-[#dc2626]",
-      bg: "bg-[#dc2626]/12",
-      border: "border-[#dc2626]/35",
-      accent: "bg-[#dc2626]",
-      glow: "bg-[#dc2626]/22"
+      text: "text-red-500",
+      bg: "bg-red-500/12",
+      border: "border-red-500/35",
+      accent: "bg-red-500",
+      glow: "bg-red-500/22"
     },
     febril: {
-      text: "text-[#eab308]",
-      bg: "bg-[#eab308]/12",
-      border: "border-[#eab308]/35",
-      accent: "bg-[#eab308]",
-      glow: "bg-[#eab308]/18"
+      text: "text-amber-500",
+      bg: "bg-amber-500/12",
+      border: "border-amber-500/35",
+      accent: "bg-amber-500",
+      glow: "bg-amber-500/18"
     },
     digestivo: {
-      text: "text-[#f97316]",
-      bg: "bg-[#f97316]/12",
-      border: "border-[#f97316]/35",
-      accent: "bg-[#f97316]",
-      glow: "bg-[#f97316]/18"
+      text: "text-orange-500",
+      bg: "bg-orange-500/12",
+      border: "border-orange-500/35",
+      accent: "bg-orange-500",
+      glow: "bg-orange-500/18"
     },
     celo: {
-      text: "text-[#ec4899]",
-      bg: "bg-[#ec4899]/12",
-      border: "border-[#ec4899]/35",
-      accent: "bg-[#ec4899]",
-      glow: "bg-[#ec4899]/18"
+      text: "text-blue-400",
+      bg: "bg-blue-500/12",
+      border: "border-blue-500/35",
+      accent: "bg-blue-400",
+      glow: "bg-blue-400/18"
     },
     sin_datos: {
       text: "text-on-surface-variant",

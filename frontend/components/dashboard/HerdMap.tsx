@@ -9,8 +9,21 @@ interface HerdMapProps extends React.HTMLAttributes<HTMLDivElement> {
 }
 
 export function HerdMap({ animals, onAnimalClick, lastFetchTime, className, ...props }: HerdMapProps) {
-  const animalsWithData = animals.filter(a => a.status !== "sin datos");
-  const animalsWithoutData = animals.filter(a => a.status === "sin datos");
+  const getStatusWeight = (status: string | undefined): number => {
+    const s = status?.toLowerCase() || "";
+    if (s === "mastitis") return 0;
+    if (s === "febril") return 1;
+    if (s === "digestivo") return 2;
+    if (s === "celo") return 3;
+    if (s === "sana") return 4;
+    return 5;
+  };
+
+  const animalsWithData = animals
+    .filter(a => a.status?.toLowerCase() !== "sin datos" && a.status?.toLowerCase() !== "sin_datos")
+    .sort((a, b) => getStatusWeight(a.status) - getStatusWeight(b.status));
+
+  const animalsWithoutData = animals.filter(a => a.status?.toLowerCase() === "sin datos" || a.status?.toLowerCase() === "sin_datos");
 
   return (
     <div className={cn("flex flex-col h-full gap-4", className)} {...props}>
