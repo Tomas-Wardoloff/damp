@@ -13,9 +13,13 @@ const HerdGeoMapClient = dynamic(
   { ssr: false },
 );
 
-const DEFAULT_REFRESH_SECONDS = Number(
-  process.env.NEXT_PUBLIC_MAP_REFRESH_SECONDS || "10",
-);
+const DEFAULT_REFRESH_SECONDS = 15;
+
+function getRefreshSecondsFromEnv(): number {
+  const raw = Number(process.env.NEXT_PUBLIC_MAP_REFRESH_SECONDS);
+  if (!Number.isFinite(raw) || raw <= 0) return DEFAULT_REFRESH_SECONDS;
+  return Math.floor(raw);
+}
 
 const STATUS_COLORS: Record<string, string> = {
   SANA: "#16a34a",
@@ -76,14 +80,12 @@ export default function MapaRodeoPage() {
   const [points, setPoints] = useState<HerdMapPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null);
-  const [refreshSeconds, setRefreshSeconds] = useState(DEFAULT_REFRESH_SECONDS);
+  const refreshSeconds = getRefreshSecondsFromEnv();
 
   const loadMapData = useCallback(async () => {
     try {
       const data = await fetchDashboardData();
       const animals = data.animals;
-
-      const nowMs = Date.now();
 
       const mappedPoints: HerdMapPoint[] = animals
         .filter((a: any) => {
@@ -94,11 +96,23 @@ export default function MapaRodeoPage() {
           return lat !== null && lng !== null;
         })
         .map((a: any) => {
-          const status = a.status?.toUpperCase() || "SANA";
+          const status =
+            typeof a.primaryStatus === "string"
+              ? a.primaryStatus.toUpperCase()
+              : a.status?.toUpperCase() || "SANA";
           const normalizedStatus = normalizeDisplayedStatus(status);
           const latestTimestamp = typeof a.rawLastUpdated === "string"
             ? a.rawLastUpdated
             : a.lastUpdated;
+          const primaryConfidence = typeof a.primaryConfidence === "number" ? a.primaryConfidence : null;
+          const secondaryConfidence = typeof a.secondaryConfidence === "number" ? a.secondaryConfidence : null;
+          const healthCreatedAt = typeof a.healthCreatedAt === "string"
+            ? a.healthCreatedAt
+            : null;
+          const confidence =
+            typeof a.confidence === "number"
+              ? a.confidence
+              : primaryConfidence;
 
           return {
             cowId: Number(a.id),
@@ -106,12 +120,15 @@ export default function MapaRodeoPage() {
             lng: Number(a.longitud),
             timestamp: latestTimestamp,
             healthStatus: normalizedStatus,
-            confidence: null, // Summary currently doesn't provide confidence
-            healthCreatedAt: latestTimestamp,
+            confidence,
+            healthCreatedAt,
             primaryStatus: status,
-            primaryConfidence: null,
-            secondaryStatus: null,
-            secondaryConfidence: null,
+            primaryConfidence,
+            secondaryStatus:
+              typeof a.secondaryStatus === "string"
+                ? a.secondaryStatus.toUpperCase()
+                : null,
+            secondaryConfidence,
           };
         });
 
@@ -130,12 +147,9 @@ export default function MapaRodeoPage() {
   }, [loadMapData]);
 
   useEffect(() => {
-    const safeRefresh = Number.isFinite(refreshSeconds) && refreshSeconds > 0
-      ? refreshSeconds
-      : DEFAULT_REFRESH_SECONDS;
     const intervalId = setInterval(() => {
       loadMapData();
-    }, safeRefresh * 1000);
+    }, refreshSeconds * 1000);
 
     return () => clearInterval(intervalId);
   }, [loadMapData, refreshSeconds]);
@@ -169,27 +183,12 @@ export default function MapaRodeoPage() {
             <span className="relative inline-flex items-center group">
               <Clock3 className="w-4 h-4 text-on-surface-variant" />
               <span className="pointer-events-none absolute bottom-full left-1/2 z-9999 mb-2 w-72 -translate-x-1/2 rounded-md bg-slate-900 px-3 py-2 text-[11px] font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
-                Este valor define cada cuántos segundos se recarga el mapa y se consulta la última lectura disponible de cada vaca.
+                El mapa se recarga automáticamente cada {refreshSeconds} segundos según la variable NEXT_PUBLIC_MAP_REFRESH_SECONDS.
               </span>
             </span>
-            <label htmlFor="refresh-seconds" className="text-label-sm text-on-surface-variant">
-              Actualización (seg)
-            </label>
-            <input
-              id="refresh-seconds"
-              type="number"
-              min={3}
-              max={300}
-              step={1}
-              value={refreshSeconds}
-              onChange={(event) => {
-                const nextValue = Number(event.target.value);
-                if (Number.isFinite(nextValue) && nextValue > 0) {
-                  setRefreshSeconds(nextValue);
-                }
-              }}
-              className="w-24 rounded-md border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-md"
-            />
+            <span className="text-label-sm text-on-surface-variant">
+              Actualización automática: {refreshSeconds}s
+            </span>
             <span className="text-label-sm text-on-surface-variant">
               {lastFetchTime
                 ? `Última actualización: ${lastFetchTime.toLocaleTimeString()}`

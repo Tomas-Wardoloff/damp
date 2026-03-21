@@ -28,6 +28,12 @@ class CowSummaryItem(BaseModel):
     latitud: float | str | None = None
     longitud: float | str | None = None
     lastUpdated: str
+    healthCreatedAt: str | None = None
+    confidence: float | None = None
+    primaryStatus: str | None = None
+    primaryConfidence: float | None = None
+    secondaryStatus: str | None = None
+    secondaryConfidence: float | None = None
 
 
 class CowSummaryResponse(BaseModel):

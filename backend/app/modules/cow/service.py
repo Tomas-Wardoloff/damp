@@ -113,6 +113,12 @@ class CowService:
                     "latitud": reading.latitud if reading else None,
                     "longitud": reading.longitud if reading else None,
                     "lastUpdated": reading.timestamp.isoformat() if reading else "N/A",
+                    "healthCreatedAt": health.created_at.isoformat() if health else None,
+                    "confidence": health.confidence if health else None,
+                    "primaryStatus": health.primary_status.value if health and health.primary_status else None,
+                    "primaryConfidence": health.primary_confidence if health else None,
+                    "secondaryStatus": health.secondary_status.value if health and health.secondary_status else None,
+                    "secondaryConfidence": health.secondary_confidence if health else None,
                 }
             )
 
