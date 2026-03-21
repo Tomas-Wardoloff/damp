@@ -20,6 +20,11 @@ from app.modules.health.service import HealthService
 router = APIRouter(prefix="/health", tags=["health"])
 
 
+def _ensure_scheduler_table(db: Session) -> None:
+    bind = db.get_bind()
+    HealthSchedulerConfig.__table__.create(bind=bind, checkfirst=True)
+
+
 @router.post("/analyze/{cow_id}", response_model=HealthAnalysisResponse)
 async def analyze_cow_health(
     cow_id: int,
@@ -48,6 +53,7 @@ def get_health_history(cow_id: int, db: Session = Depends(get_db)) -> list[Healt
 
 @router.get("/scheduler/config", response_model=HealthSchedulerConfigResponse)
 def get_scheduler_config(db: Session = Depends(get_db)) -> HealthSchedulerConfigResponse:
+    _ensure_scheduler_table(db)
     config = db.scalar(select(HealthSchedulerConfig).order_by(HealthSchedulerConfig.id.asc()).limit(1))
     if config is None:
         config = HealthSchedulerConfig(
@@ -67,6 +73,7 @@ def update_scheduler_config(
     request: Request,
     db: Session = Depends(get_db),
 ) -> HealthSchedulerConfigResponse:
+    _ensure_scheduler_table(db)
     config = db.scalar(select(HealthSchedulerConfig).order_by(HealthSchedulerConfig.id.asc()).limit(1))
     if config is None:
         config = HealthSchedulerConfig(

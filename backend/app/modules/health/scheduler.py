@@ -110,6 +110,7 @@ class HealthCheckScheduler:
 
 
 def _get_or_create_config(db) -> HealthSchedulerConfig:
+    HealthSchedulerConfig.__table__.create(bind=db.get_bind(), checkfirst=True)
     config = db.scalar(select(HealthSchedulerConfig).order_by(HealthSchedulerConfig.id.asc()).limit(1))
     if config is not None:
         return config
