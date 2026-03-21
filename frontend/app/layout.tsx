@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Manrope, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import { Sidebar } from "@/components/layout/Sidebar";
 
 const inter = Inter({
