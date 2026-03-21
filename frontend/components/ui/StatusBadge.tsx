@@ -17,28 +17,28 @@ export function StatusBadge({ status, pulse = false, className, ...props }: Stat
       dot: "bg-primary vital-pulse-primary"
     },
     subclinica: {
-      bg: "bg-secondary-container/20 text-secondary border-secondary/30",
-      dot: "bg-secondary animate-pulse"
+      bg: "bg-amber-500/20 text-amber-500 border-amber-500/30",
+      dot: "bg-amber-500 animate-pulse"
     },
     clinica: {
-      bg: "bg-tertiary-container/20 text-tertiary border-tertiary/30",
-      dot: "bg-tertiary animate-pulse"
+      bg: "bg-red-500/20 text-red-500 border-red-500/30",
+      dot: "bg-red-500 animate-pulse"
     },
     mastitis: {
-      bg: "bg-tertiary-container/20 text-tertiary border-tertiary/30",
-      dot: "bg-tertiary vital-pulse-tertiary"
+      bg: "bg-red-500/20 text-red-500 border-red-500/30",
+      dot: "bg-red-500 vital-pulse-tertiary"
     },
     celo: {
       bg: "bg-blue-500/20 text-blue-400 border-blue-500/30",
       dot: "bg-blue-400 animate-pulse"
     },
     febril: {
-      bg: "bg-secondary-container/20 text-secondary border-secondary/30",
-      dot: "bg-secondary animate-pulse"
+      bg: "bg-amber-500/20 text-amber-500 border-amber-500/30",
+      dot: "bg-amber-500 animate-pulse"
     },
     digestivo: {
-      bg: "bg-secondary-container/20 text-secondary border-secondary/30",
-      dot: "bg-secondary animate-pulse"
+      bg: "bg-orange-500/20 text-orange-500 border-orange-500/30",
+      dot: "bg-orange-500 animate-pulse"
     },
     "sin datos": {
       bg: "bg-surface-container/50 text-on-surface-variant border-outline-variant/50",
