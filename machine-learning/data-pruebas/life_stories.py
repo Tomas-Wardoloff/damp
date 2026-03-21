@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 IV_MIN     = 5
-OUTPUT_DIR = Path("data_simulador")
+OUTPUT_DIR = Path("data-pruebas/data")
 
 def circ(h):
     return 0.55 + 0.45*(math.exp(-0.5*((h-7)/1.5)**2)+math.exp(-0.5*((h-17)/1.5)**2))

@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class MastitisPredictor:
-    def __init__(self, model_path: str = "models/mastitis_model.pkl"):
+    def __init__(self, model_path: str = "models/nuevas-clases/mastitis_model_v2.pkl"):
         if not Path(model_path).exists():
             raise FileNotFoundError(
                 f"Modelo no encontrado: {model_path}\n"
@@ -53,6 +53,17 @@ class MastitisPredictor:
             lat_range = window["latitud"].max() - window["latitud"].min()
             lon_range = window["longitud"].max() - window["longitud"].min()
             feats["gps_spread"] = np.sqrt(lat_range**2 + lon_range**2) * 111000
+
+        # Features temporales — deben coincidir exactamente con train.py
+        if "timestamp" in window.columns:
+            hours = pd.to_datetime(window["timestamp"]).dt.hour.values
+            feats["hour_mean"]        = np.mean(hours)
+            feats["night_ratio"]      = np.mean((hours >= 22) | (hours <= 5))
+            feats["metro_night_mean"] = np.mean(
+                window["metros_recorridos"].values[
+                    (hours >= 22) | (hours <= 5)
+                ]
+            ) if np.any((hours >= 22) | (hours <= 5)) else 0.0
 
         return pd.DataFrame([feats])[self.feature_names]
 

@@ -94,7 +94,11 @@ def build_windowed_dataset(df: pd.DataFrame):
         n = len(group)
         for start in range(0, n - WINDOW_SIZE + 1, STEP_SIZE):
             window = group.iloc[start : start + WINDOW_SIZE]
-            label  = window["label"].iloc[-1]
+            # Usar label dominante de la ventana en lugar del último registro.
+            # Evita que ventanas de mastitis se etiqueten como "sana" cuando
+            # la progresión todavía no llegó a la fase final.
+            label_counts = window["label"].value_counts()
+            label = label_counts.index[0]
             all_feats.append(extract_window_features(window))
             all_labels.append(label)
             all_groups.append(animal_id)
@@ -129,8 +133,21 @@ def make_model() -> Pipeline:
 def train_model(X: pd.DataFrame, y: np.ndarray, groups: np.ndarray):
     """Split 80/20 group-aware → entrena pipeline → devuelve pipeline + sets de test."""
     animals = np.unique(groups)
+
+    # Split estratificado por clase animal — garantiza que cada clase
+    # tenga representación en train y test aunque haya pocas vacas.
+    # Necesitamos el label_animal para estratificar: tomamos el más frecuente
+    # por animal desde y y groups.
+    animal_labels = []
+    for a in animals:
+        mask   = groups == a
+        labels = y[mask]
+        animal_labels.append(int(pd.Series(labels).mode()[0]))
+    animal_labels = np.array(animal_labels)
+
     train_animals, test_animals = train_test_split(
-        animals, test_size=0.2, random_state=SEED
+        animals, test_size=0.2, random_state=SEED,
+        stratify=animal_labels   # garantiza al menos 1 animal de mastitis en test
     )
     train_idx = np.isin(groups, train_animals)
     test_idx  = np.isin(groups, test_animals)
