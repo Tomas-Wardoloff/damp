@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
 import { CowStatus } from "@/types"
-import { generateBiometricData } from "@/lib/mock-data"
+import CowHealthViewer, { SingleCowViewer, mapBackendStatusTo3D } from "@/lib/CowHealthViewer"
 
 function getStressLevel(rmssd: number, sdnn: number) {
   if (rmssd === 0 && sdnn === 0) return { value: "N/A", status: "normal" as const }
@@ -104,7 +104,7 @@ export default function AnimalDetail() {
   const displayChartData = chartData.length > 0 ? chartData : []
 
   // AI Diagnosis Logic with new model payload format (primary + secondary)
-  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "HEALTHY"
+  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "SANA"
   const primaryConf = prediction?.primary?.confidence ?? healthStatus?.primary_confidence ?? healthStatus?.confidence ?? 0
   const secondaryLabel = prediction?.secondary?.status || healthStatus?.secondary_status || null
   const secondaryConf = prediction?.secondary?.confidence ?? healthStatus?.secondary_confidence ?? null
@@ -123,6 +123,7 @@ export default function AnimalDetail() {
         description={`Registrada hace: ${formatTimeInSystem(animal.registrationDate)} | Ultima Act: ${animal.lastUpdated}`}
       />
 
+
       <div className="p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
         <Button
           variant="ghost"
@@ -137,7 +138,7 @@ export default function AnimalDetail() {
         <div className="flex items-center justify-between bg-surface-container-low p-4 rounded-lg border border-outline-variant/50">
           <div className="flex items-center gap-3">
             <span className="text-body-md font-medium text-on-surface-variant">Estado actual:</span>
-            <StatusBadge status={animal.status} pulse={animal.status !== 'sana'} />
+            <StatusBadge status={animal.status} />
           </div>
           <Button variant="primary" className="gap-2 w-fit">
             <IterationCcwIcon className="w-4 h-4" />
@@ -147,7 +148,9 @@ export default function AnimalDetail() {
         <section>
           <BiometricCards biometrics={biometrics} />
         </section>
-
+        <div>
+          <SingleCowViewer status={mapBackendStatusTo3D(prediction?.status)} />
+        </div>
         <section className="mt-2">
           <BiometricChart
             data={displayChartData}
@@ -155,7 +158,6 @@ export default function AnimalDetail() {
             normalRange={[38.0, 39.2]}
           />
         </section>
-
         <section className="mt-4">
           <DiagnosisPanel
             status={effectiveLabel as CowStatus}

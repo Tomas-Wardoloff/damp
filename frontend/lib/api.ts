@@ -1,7 +1,5 @@
 import { type Animal } from "@/components/animal/AnimalCard";
-import { type Alert } from "@/components/alerts/AlertFeed";
 import { HealthAnalysisResponse } from "@/types";
-import { MOCK_ALERTS } from "./mock-data";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -34,7 +32,9 @@ async function fetchWithRetry(
   throw lastError instanceof Error ? lastError : new Error("Fetch failed");
 }
 
-function pickEffectivePrediction(health: Record<string, unknown> | null | undefined): {
+function pickEffectivePrediction(
+  health: Record<string, unknown> | null | undefined,
+): {
   status: string | null;
   confidence: number | null;
   primary: { status: string | null; confidence: number | null };
@@ -54,9 +54,14 @@ function pickEffectivePrediction(health: Record<string, unknown> | null | undefi
         ? health.confidence
         : null;
 
-  const secondaryStatus = typeof health?.secondary_status === "string" ? health.secondary_status : null;
+  const secondaryStatus =
+    typeof health?.secondary_status === "string"
+      ? health.secondary_status
+      : null;
   const secondaryConfidence =
-    typeof health?.secondary_confidence === "number" ? health.secondary_confidence : null;
+    typeof health?.secondary_confidence === "number"
+      ? health.secondary_confidence
+      : null;
 
   let effectiveStatus = primaryStatus;
   let effectiveConfidence = primaryConfidence;
@@ -78,29 +83,23 @@ function pickEffectivePrediction(health: Record<string, unknown> | null | undefi
   };
 }
 
-function toFrontendStatus(status: string | null): "healthy" | "warning" | "critical" {
-  if (!status) return "healthy";
+function toFrontendStatus(status: string | null): string {
+  if (!status) return "sin datos";
 
-  if (["CLINICA", "MASTITIS"].includes(status)) {
-    return "critical";
-  }
-
-  if (["SUBCLINICA", "FEBRIL", "DIGESTIVO"].includes(status)) {
-    return "warning";
-  }
-
-  return "healthy";
+  return status.toLowerCase();
 }
 
 function normalizeCowStatus(status: string | undefined): string {
-  if (!status) return "HEALTHY";
-  return status === "SANA" ? "HEALTHY" : status;
+  if (!status) return "SANA";
+  return status;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function getCows(): Promise<any[]> {
   try {
-    const res = await fetchWithRetry(`${API_BASE_URL}/cows`, { cache: "no-store" });
+    const res = await fetchWithRetry(`${API_BASE_URL}/cows`, {
+      cache: "no-store",
+    });
     if (!res.ok) return [];
     return await res.json();
   } catch (err) {
@@ -111,9 +110,12 @@ export async function getCows(): Promise<any[]> {
 
 export async function getLatestReading(cowId: number): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=1`, {
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${API_BASE_URL}/cows/${cowId}/readings?page=1&size=1`,
+      {
+        cache: "no-store",
+      },
+    );
     if (!res.ok) return null;
 
     const data = await res.json();
@@ -137,11 +139,16 @@ export async function getHealthStatus(cowId: number): Promise<any | null> {
   }
 }
 
-export async function getHealthHistory(cowId: number): Promise<HealthAnalysisResponse[]> {
+export async function getHealthHistory(
+  cowId: number,
+): Promise<HealthAnalysisResponse[]> {
   try {
-    const res = await fetchWithRetry(`${API_BASE_URL}/health/history/${cowId}`, {
-      cache: "no-store",
-    });
+    const res = await fetchWithRetry(
+      `${API_BASE_URL}/health/history/${cowId}`,
+      {
+        cache: "no-store",
+      },
+    );
     if (!res.ok) return [];
     return await res.json();
   } catch (err) {
@@ -150,12 +157,17 @@ export async function getHealthHistory(cowId: number): Promise<HealthAnalysisRes
   }
 }
 
-export async function getLatestHealthByHistory(cowId: number): Promise<any | null> {
+export async function getLatestHealthByHistory(
+  cowId: number,
+): Promise<any | null> {
   try {
     // /health/status is now read-only and returns latest analysis directly.
     return await getHealthStatus(cowId);
   } catch (err) {
-    console.error(`Failed to fetch latest health by history for cow ${cowId}:`, err);
+    console.error(
+      `Failed to fetch latest health by history for cow ${cowId}:`,
+      err,
+    );
     return null;
   }
 }
@@ -221,44 +233,52 @@ export async function getHealthSchedulerRuntime(): Promise<any | null> {
 
 export async function fetchDashboardData(): Promise<{
   animals: Animal[];
-  alerts: Alert[];
 }> {
-  const [latestReadings, cows] = await Promise.all([getLatestReadings(), getCows()]);
+  const [latestReadings, cows] = await Promise.all([
+    getLatestReadings(),
+    getCows(),
+  ]);
 
-  if (!latestReadings || latestReadings.length === 0) {
-    return { animals: [], alerts: MOCK_ALERTS };
+  if (!cows || cows.length === 0) {
+    return { animals: [] };
   }
 
-  // Create lookup for breed
-  const cowMap = new Map();
-  if (cows) {
-    cows.forEach((cow) =>
-      cowMap.set(cow.id || cow.cow_id, cow.breed || "Mestiza"),
-    );
+  // Create lookup for readings mapping cow_id to reading
+  const readingMap = new Map();
+  if (latestReadings) {
+    latestReadings.forEach((r) => readingMap.set(r.cow_id, r));
   }
 
-  // To build the dashboard we need the AI status for each reading.
   // We process in batches to prevent "Failed to fetch" errors caused by opening
-  // too many concurrent connections (browser connection limit / local server socket exhaustion).
+  // too many concurrent connections
   const animals: Animal[] = [];
   const chunkSize = 5;
 
-  for (let i = 0; i < latestReadings.length; i += chunkSize) {
-    const chunk = latestReadings.slice(i, i + chunkSize);
+  for (let i = 0; i < cows.length; i += chunkSize) {
+    const chunk = cows.slice(i, i + chunkSize);
 
     const chunkResults = await Promise.all(
-      chunk.map(async (reading) => {
-        const cowId = reading.cow_id;
-        const health = await getHealthStatus(cowId);
+      chunk.map(async (cow) => {
+        const cowId = cow.id || cow.cow_id;
+        const reading = readingMap.get(cowId);
+
+        let health = null;
+        if (reading) {
+          health = await getHealthStatus(cowId);
+        }
         const prediction = pickEffectivePrediction(health);
 
         return {
           id: String(cowId),
-          breed: cowMap.get(cowId) || "Mestiza",
+          breed: cow.breed || "Mestiza",
           status: toFrontendStatus(prediction.status),
-          temperature: reading?.temperatura_corporal_prom ?? 38.5,
-          heartRate: reading?.frec_cardiaca_prom ? Math.round(reading.frec_cardiaca_prom) : 70,
-          distance: reading?.metros_recorridos ? Math.round(reading.metros_recorridos) : 0,
+          temperature: reading?.temperatura_corporal_prom ?? "--",
+          heartRate: reading?.frec_cardiaca_prom
+            ? Math.round(reading.frec_cardiaca_prom)
+            : "--",
+          distance: reading?.metros_recorridos
+            ? Math.round(reading.metros_recorridos)
+            : "--",
           lastUpdated: reading?.timestamp
             ? new Date(reading.timestamp).toLocaleString([], {
                 year: "numeric",
@@ -275,7 +295,7 @@ export async function fetchDashboardData(): Promise<{
     animals.push(...chunkResults);
   }
 
-  return { animals, alerts: MOCK_ALERTS };
+  return { animals };
 }
 
 export async function fetchAnimalDetail(idString: string) {
@@ -283,7 +303,9 @@ export async function fetchAnimalDetail(idString: string) {
   if (isNaN(cowId)) return null;
 
   const [cowRes, readingsRes, healthStatus, healthHistory] = await Promise.all([
-    fetch(`${API_BASE_URL}/cows/${cowId}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
+    fetch(`${API_BASE_URL}/cows/${cowId}`, { cache: "no-store" }).then((r) =>
+      r.ok ? r.json() : null,
+    ),
     fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=200`, {
       cache: "no-store",
     }).then((r) => (r.ok ? r.json() : [])),
@@ -293,7 +315,9 @@ export async function fetchAnimalDetail(idString: string) {
 
   if (!cowRes) return null;
 
-  const rawReadings = Array.isArray(readingsRes) ? readingsRes : readingsRes?.items || readingsRes?.readings || [];
+  const rawReadings = Array.isArray(readingsRes)
+    ? readingsRes
+    : readingsRes?.items || readingsRes?.readings || [];
 
   const chartData = rawReadings
     .map((r: any) => ({
@@ -326,8 +350,12 @@ export async function fetchAnimalDetail(idString: string) {
     registrationDate: cowRes.registration_date || new Date().toISOString(),
     status: frontendStatus,
     temperature: latestReading?.temperatura_corporal_prom || 38.5,
-    heartRate: latestReading?.frec_cardiaca_prom ? Math.round(latestReading.frec_cardiaca_prom) : 70,
-    distance: latestReading?.metros_recorridos ? Math.round(latestReading.metros_recorridos) : 0,
+    heartRate: latestReading?.frec_cardiaca_prom
+      ? Math.round(latestReading.frec_cardiaca_prom)
+      : 70,
+    distance: latestReading?.metros_recorridos
+      ? Math.round(latestReading.metros_recorridos)
+      : 0,
     rumination: latestReading?.hubo_rumia ?? false,
     rmssd: latestReading?.rmssd || 0,
     sdnn: latestReading?.sdnn || 0,

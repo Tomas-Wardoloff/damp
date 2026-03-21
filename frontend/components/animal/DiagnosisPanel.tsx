@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function DiagnosisPanel({ status, confidence, className }: Props) {
-  const content = DIAGNOSIS_CONTENT[status] ?? DIAGNOSIS_CONTENT["HEALTHY"]
+  const content = DIAGNOSIS_CONTENT[status] ?? DIAGNOSIS_CONTENT["SANA"]
   const urgency = URGENCY_CONFIG[content.urgency]
   const confPercent = Math.round(confidence * 100)
 
@@ -21,7 +21,7 @@ export function DiagnosisPanel({ status, confidence, className }: Props) {
         Info
 
   return (
-    <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low overflow-hidden">
+    <div className={cn("rounded-2xl border border-outline-variant/30 bg-surface-container-low overflow-hidden", className)}>
 
       {/* Header strip — urgency color */}
       <div className="p-6 flex items-center justify-between border-b border-outline-variant/30">

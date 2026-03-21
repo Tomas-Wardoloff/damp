@@ -5,39 +5,63 @@ import { MetricCard } from "./MetricCard"
 interface SummaryMetricsProps extends React.HTMLAttributes<HTMLDivElement> {
   metrics: {
     total: number
-    healthy: number
-    warning: number
-    critical: number
+    sana: number
+    mastitis: number
+    celo: number
+    febril: number
+    digestivo: number
+    sinDatos: number
   }
 }
 
 export function SummaryMetrics({ metrics, className, ...props }: SummaryMetricsProps) {
-  const healthyPercentage = metrics.total > 0 ? Math.round((metrics.healthy / metrics.total) * 100) : 0;
+  const getPercentage = (value: number) => {
+    return metrics.total > 0 ? Math.round((value / metrics.total) * 100) : 0;
+  };
 
   return (
-    <div className={cn("grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6", className)} {...props}>
+    <div className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4", className)} {...props}>
       <MetricCard
-        title="Cabezas de Ganado"
+        title="Total Ganado"
         value={metrics.total}
-        subtitle="Animales monitoreados"
+        subtitle="Monitoreados"
+        status="neutral"
       />
       <MetricCard
-        title="Animales Sanos"
-        value={metrics.healthy}
-        status="healthy"
-        subtitle={`${healthyPercentage}% del ganado total`}
+        title="Sin Datos"
+        value={metrics.sinDatos}
+        status="sin_datos"
+        subtitle={`${getPercentage(metrics.sinDatos)}% del ganado`}
       />
       <MetricCard
-        title="Animales en Riesgo"
-        value={metrics.warning}
-        status="warning"
-        subtitle="Alerta moderada"
+        title="Sanas"
+        value={metrics.sana}
+        status="sana"
+        subtitle={`${getPercentage(metrics.sana)}% del ganado`}
       />
       <MetricCard
-        title="Animales en Estado Críticos"
-        value={metrics.critical}
-        status="critical"
-        subtitle="Requieren atención"
+        title="Mastitis"
+        value={metrics.mastitis}
+        status="mastitis"
+        subtitle={`${getPercentage(metrics.mastitis)}% del ganado`}
+      />
+      <MetricCard
+        title="Celo"
+        value={metrics.celo}
+        status="celo"
+        subtitle={`${getPercentage(metrics.celo)}% del ganado`}
+      />
+      <MetricCard
+        title="Febril"
+        value={metrics.febril}
+        status="febril"
+        subtitle={`${getPercentage(metrics.febril)}% del ganado`}
+      />
+      <MetricCard
+        title="Digestivo"
+        value={metrics.digestivo}
+        status="digestivo"
+        subtitle={`${getPercentage(metrics.digestivo)}% del ganado`}
       />
     </div>
   )

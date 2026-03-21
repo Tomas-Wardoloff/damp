@@ -1,7 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
-export type Status = "sana" | "subclinica" | "mastitis" | "celo" | "febril" | "digestivo" | string
+export type Status = "sana" | "subclinica" | "clinica" | "mastitis" | "celo" | "febril" | "digestivo" | "sin datos" | string
 
 interface StatusBadgeProps extends React.HTMLAttributes<HTMLDivElement> {
   status: Status
@@ -20,6 +20,10 @@ export function StatusBadge({ status, pulse = false, className, ...props }: Stat
       bg: "bg-secondary-container/20 text-secondary border-secondary/30",
       dot: "bg-secondary animate-pulse"
     },
+    clinica: {
+      bg: "bg-tertiary-container/20 text-tertiary border-tertiary/30",
+      dot: "bg-tertiary animate-pulse"
+    },
     mastitis: {
       bg: "bg-tertiary-container/20 text-tertiary border-tertiary/30",
       dot: "bg-tertiary vital-pulse-tertiary"
@@ -35,6 +39,10 @@ export function StatusBadge({ status, pulse = false, className, ...props }: Stat
     digestivo: {
       bg: "bg-secondary-container/20 text-secondary border-secondary/30",
       dot: "bg-secondary animate-pulse"
+    },
+    "sin datos": {
+      bg: "bg-surface-container/50 text-on-surface-variant border-outline-variant/50",
+      dot: "bg-outline-variant/50 animate-none"
     }
   }
 

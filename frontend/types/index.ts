@@ -6,12 +6,14 @@ export interface CowResponse {
 }
 
 export type CowStatus =
-  | "HEALTHY"
+  | "SANA"
   | "SUBCLINICA"
+  | "CLINICA"
   | "MASTITIS"
   | "CELO"
   | "FEBRIL"
-  | "DIGESTIVO";
+  | "DIGESTIVO"
+  | "SIN DATOS";
 
 export type UrgencyLevel = "none" | "low" | "medium" | "high";
 
@@ -25,7 +27,7 @@ export interface DiagnosisContent {
 }
 
 export const DIAGNOSIS_CONTENT: Record<CowStatus, DiagnosisContent> = {
-  HEALTHY: {
+  SANA: {
     label: "Saludable",
     urgency: "none",
     summary: "El animal se encuentra dentro de todos los parámetros normales.",
@@ -34,6 +36,25 @@ export const DIAGNOSIS_CONTENT: Record<CowStatus, DiagnosisContent> = {
     recommendation:
       "Continuar con el monitoreo rutinario. No se requiere intervención.",
     timeframe: "Próxima revisión: seguimiento estándar",
+  },
+  CLINICA: {
+    label: "Estado Clínico",
+    urgency: "high",
+    summary: "El animal presenta síntomas severos de enfermedad clínica.",
+    what_it_means:
+      "Los biomarcadores indican un cuadro clínico evidente. El animal requiere aislamiento y atención inmediata.",
+    recommendation: "Contactar de urgencia al veterinario e iniciar protocolo de tratamiento respectivo.",
+    timeframe: "Intervención requerida: Inmediata",
+  },
+  "SIN DATOS": {
+    label: "Faltan datos",
+    urgency: "none",
+    summary: "No hay suficientes datos biométricos recolectados del animal.",
+    what_it_means:
+      "Los sensores no han registrado datos recientemente. Puede deberse a problemas de conectividad, collar apagado, o datos pendientes de procesamiento.",
+    recommendation:
+      "Verificar el estado de la batería del collar y su correcta colocación en el animal.",
+    timeframe: "Próxima revisión: Cuando se restablezca la conexión",
   },
 
   SUBCLINICA: {

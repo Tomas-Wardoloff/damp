@@ -1,22 +1,18 @@
 "use client"
 
-import * as React from "react"
 import { useState, useEffect } from "react"
 import { SummaryMetrics } from "@/components/dashboard/SummaryMetrics"
 import { HerdMap } from "@/components/dashboard/HerdMap"
-import { AlertFeed } from "@/components/alerts/AlertFeed"
 import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { fetchDashboardData } from "@/lib/api"
 import { type Animal } from "@/components/animal/AnimalCard"
-import { type Alert } from "@/components/alerts/AlertFeed"
 import { Activity } from "lucide-react"
 
 export default function Dashboard() {
   const router = useRouter()
 
   const [animals, setAnimals] = useState<Animal[]>([])
-  const [alerts, setAlerts] = useState<Alert[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null)
 
@@ -33,7 +29,6 @@ export default function Dashboard() {
         } else {
           setAnimals(data.animals)
         }
-        setAlerts(data.alerts)
         setLastFetchTime(new Date())
       } catch (err) {
         console.error(err)
@@ -48,11 +43,16 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
+  const countStatus = (status: string) => animals.filter(a => a.status?.toLowerCase() === status).length;
+
   const metrics = {
     total: animals.length,
-    healthy: animals.filter(a => a.status === "healthy").length,
-    warning: animals.filter(a => a.status === "warning").length,
-    critical: animals.filter(a => a.status === "critical").length,
+    sana: countStatus("sana"),
+    mastitis: countStatus("mastitis"),
+    celo: countStatus("celo"),
+    febril: countStatus("febril"),
+    digestivo: countStatus("digestivo"),
+    sinDatos: animals.filter(a => !a.status || a.status?.toLowerCase() === "sin datos" || a.status?.toLowerCase() === "sin_datos").length,
   }
 
   return (
@@ -83,14 +83,6 @@ export default function Dashboard() {
               className="flex-1 min-h-0"
             />
           )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="flex-1 min-w-[320px] max-w-100 border-l border-outline-variant/30 p-6 bg-surface-container-lowest overflow-y-auto">
-          <AlertFeed
-            alerts={alerts}
-            onViewAnimal={(id) => router.push(`/animal/${id}`)}
-          />
         </div>
       </div>
     </div>
