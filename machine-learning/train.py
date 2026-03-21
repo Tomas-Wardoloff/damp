@@ -10,8 +10,10 @@ from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import StratifiedGroupKFold, train_test_split
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.metrics import (classification_report, confusion_matrix,f1_score, accuracy_score)
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
 
-CSV_PATH = "damp_data.csv"
+CSV_PATH = "data/damp_data_temporal.csv"
 MODEL_PATH      = "models/mastitis_model.pkl"
 WINDOW_SIZE     = 50
 STEP_SIZE       = 10
@@ -88,7 +90,7 @@ def build_windowed_dataset(df: pd.DataFrame):
  
 def make_model():
     """Instancia el clasificador con los hiperparámetros del MVP."""
-    return GradientBoostingClassifier(
+    model =  GradientBoostingClassifier(
         n_estimators=200,
         learning_rate=0.08,
         max_depth=4,
@@ -96,6 +98,15 @@ def make_model():
         subsample=0.8,
         random_state=SEED,
     )
+
+    pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="median")),
+        ("scaler", StandardScaler()),
+        ("clf", model)
+    ])
+
+    return pipeline
+
  
  
 def train_model(X: pd.DataFrame, y: np.ndarray, groups: np.ndarray):
@@ -128,28 +139,29 @@ def train_model(X: pd.DataFrame, y: np.ndarray, groups: np.ndarray):
  
 # mas simple para debug del modelo.
 def train_model(X, y, groups):
-    scaler   = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
     # Split 80/20 — group-aware para no mezclar animales entre train y test
-    animals      = np.unique(groups)
+    animals = np.unique(groups)
     train_animals, test_animals = train_test_split(
         animals, test_size=0.2, random_state=SEED
     )
     train_idx = np.isin(groups, train_animals)
     test_idx  = np.isin(groups, test_animals)
 
-    X_train, X_test = X_scaled[train_idx], X_scaled[test_idx]
-    y_train, y_test = y[train_idx],         y[test_idx]
+    # Nota: Pasamos X tal cual (sin escalar)
+    X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+    y_train, y_test = y[train_idx], y[test_idx]
 
     print(f"  Train: {train_idx.sum():,} ventanas ({len(train_animals)} animales)")
     print(f"  Test : {test_idx.sum():,} ventanas ({len(test_animals)} animales)\n")
 
-    model = make_model()
-    model.fit(X_train, y_train)
+    # Creamos y entrenamos el pipeline
+    pipeline = make_model()
+    pipeline.fit(X_train, y_train)
 
-    y_pred = model.predict(X_test)
-    return model, scaler, y_test, y_pred
+    y_pred = pipeline.predict(X_test)
+    
+    # Devolvemos el pipeline entrenado
+    return pipeline, y_test, y_pred
 
 # ── Evaluación ────────────────────────────────────────────────────────────────
  
@@ -175,7 +187,10 @@ def evaluate(y_true, y_pred, le):
     print("═"*55)
  
  
-def print_feature_importance(model, feature_names, top_n=15):
+def print_feature_importance(pipeline, feature_names, top_n=15):
+    # MODIFICADO: Extraer el modelo del pipeline usando el nombre del paso ('clf')
+    model = pipeline.named_steps["clf"]
+    
     imp = pd.Series(model.feature_importances_, index=feature_names)
     imp = imp.sort_values(ascending=False).head(top_n)
     print(f"\n  Top {top_n} features más importantes:")
@@ -202,14 +217,13 @@ def main():
         print(f"    {le.classes_[cls_idx]:12s}: {cnt:,} ({cnt/len(y)*100:.1f}%)")
  
     # Entrenamos con solo el split de 80/20 no por folds, es mas facil de entender este metodo
-    final_model, scaler, y_test, y_pred = train_model(X, y, groups)
+    final_pipeline, y_test, y_pred = train_model(X, y, groups)
 
     evaluate(y_test, y_pred, le)
-    print_feature_importance(final_model, list(X.columns))
+    print_feature_importance(final_pipeline, list(X.columns))
  
     artifact = {
-        "model":            final_model,
-        "scaler":           scaler,
+        "model":            final_pipeline,  
         "label_encoder":    le,
         "feature_names":    list(X.columns),
         "window_size":      WINDOW_SIZE,
