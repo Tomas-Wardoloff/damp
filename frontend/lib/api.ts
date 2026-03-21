@@ -5,6 +5,35 @@ import { MOCK_ALERTS } from "./mock-data";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
+async function fetchWithRetry(
+  input: string,
+  init: RequestInit = {},
+  timeoutMs = 12000,
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } catch (error) {
+      lastError = error;
+      if (attempt === 1) {
+        throw error;
+      }
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Fetch failed");
+}
+
 function pickEffectivePrediction(health: Record<string, unknown> | null | undefined): {
   status: string | null;
   confidence: number | null;
@@ -71,7 +100,7 @@ function normalizeCowStatus(status: string | undefined): string {
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function getCows(): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/cows`, { cache: "no-store" });
+    const res = await fetchWithRetry(`${API_BASE_URL}/cows`, { cache: "no-store" });
     if (!res.ok) return [];
     return await res.json();
   } catch (err) {
@@ -97,7 +126,7 @@ export async function getLatestReading(cowId: number): Promise<any | null> {
 
 export async function getHealthStatus(cowId: number): Promise<any | null> {
   try {
-    const res = await fetch(`${API_BASE_URL}/health/status/${cowId}`, {
+    const res = await fetchWithRetry(`${API_BASE_URL}/health/status/${cowId}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
@@ -110,7 +139,7 @@ export async function getHealthStatus(cowId: number): Promise<any | null> {
 
 export async function getHealthHistory(cowId: number): Promise<HealthAnalysisResponse[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/health/history/${cowId}`, {
+    const res = await fetchWithRetry(`${API_BASE_URL}/health/history/${cowId}`, {
       cache: "no-store",
     });
     if (!res.ok) return [];
@@ -123,8 +152,8 @@ export async function getHealthHistory(cowId: number): Promise<HealthAnalysisRes
 
 export async function getLatestHealthByHistory(cowId: number): Promise<any | null> {
   try {
-    const history = await getHealthHistory(cowId);
-    return history.length > 0 ? history[0] : null;
+    // /health/status is now read-only and returns latest analysis directly.
+    return await getHealthStatus(cowId);
   } catch (err) {
     console.error(`Failed to fetch latest health by history for cow ${cowId}:`, err);
     return null;
@@ -133,7 +162,7 @@ export async function getLatestHealthByHistory(cowId: number): Promise<any | nul
 
 export async function getLatestReadings(): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE_URL}/readings/latests`, {
+    const res = await fetchWithRetry(`${API_BASE_URL}/readings/latests`, {
       cache: "no-store",
     });
     if (!res.ok) return [];

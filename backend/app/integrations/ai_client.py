@@ -27,6 +27,28 @@ def _parse_confidence(raw_confidence: object) -> float | None:
     return float(raw_confidence)
 
 
+def _parse_bool(raw_flag: object) -> bool | None:
+    if raw_flag is None:
+        return None
+    if isinstance(raw_flag, bool):
+        return raw_flag
+    if isinstance(raw_flag, (int, float)):
+        return raw_flag != 0
+    if isinstance(raw_flag, str):
+        normalized = raw_flag.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    raise ValueError(f"Invalid boolean value: {raw_flag!r}")
+
+
+def _parse_int(raw_value: object) -> int | None:
+    if raw_value is None:
+        return None
+    return int(raw_value)
+
+
 class AIClient:
     async def predict(self, cow_id: int, readings: list[dict]) -> AIPredictionResult:
         url = f"{settings.ai_service_url.rstrip('/')}/predict"
@@ -35,24 +57,25 @@ class AIClient:
             response.raise_for_status()
             payload = response.json()
 
-            # Backward compatibility: support previous response format {status, confidence}
-            if "status" in payload and "primary" not in payload:
-                return AIPredictionResult(
-                    model_cow_id=str(payload.get("cow_id")) if payload.get("cow_id") is not None else None,
-                    primary_status=_parse_label(payload.get("status")),
-                    primary_confidence=_parse_confidence(payload.get("confidence")),
-                    alert=bool(payload.get("alert")) if payload.get("alert") is not None else None,
-                    n_readings_used=int(payload.get("n_readings_used")) if payload.get("n_readings_used") is not None else None,
-                )
+            if not isinstance(payload, dict):
+                raise TypeError("AI response must be a JSON object")
 
-            primary = payload.get("primary") or {}
-            secondary = payload.get("secondary") or {}
+            primary = payload.get("primary")
+            secondary = payload.get("secondary")
+            if not isinstance(primary, dict) or not isinstance(secondary, dict):
+                raise ValueError("AI response must include 'primary' and 'secondary' objects")
+
+            if "label" not in primary or "confidence" not in primary:
+                raise ValueError("AI response 'primary' must include 'label' and 'confidence'")
+            if "label" not in secondary or "confidence" not in secondary:
+                raise ValueError("AI response 'secondary' must include 'label' and 'confidence'")
+
             return AIPredictionResult(
                 model_cow_id=str(payload.get("cow_id")) if payload.get("cow_id") is not None else None,
                 primary_status=_parse_label(primary.get("label")),
                 primary_confidence=_parse_confidence(primary.get("confidence")),
                 secondary_status=_parse_label(secondary.get("label")),
                 secondary_confidence=_parse_confidence(secondary.get("confidence")),
-                alert=bool(payload.get("alert")) if payload.get("alert") is not None else None,
-                n_readings_used=int(payload.get("n_readings_used")) if payload.get("n_readings_used") is not None else None,
+                alert=_parse_bool(payload.get("alert")),
+                n_readings_used=_parse_int(payload.get("n_readings_used")),
             )
