@@ -3,3 +3,7 @@ app/core/*.pyc
 app/core/*.pyd
 app/__pycache__/
 __pycache__/
+machine-learning/data
+machine-learning/data/damp_data_temporal.csv
+machine-learning/data/damp_data_test.csv
+machine-learning/data/damp_sample_temporal.csv

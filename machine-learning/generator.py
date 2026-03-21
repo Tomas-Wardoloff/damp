@@ -32,7 +32,7 @@ np.random.seed(42)
 # ─────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────
-N_DIAS = 3
+N_DIAS = 30
 IVMIN  = 5
 NR     = (N_DIAS * 24 * 60) // IVMIN   # 864 registros/animal
 
@@ -44,7 +44,7 @@ RODEO = {
 
 BASE = {
     "temp": 38.6,  "temp_s": 0.45,
-    "hr":   65.0,  "hr_s":   7.0,
+    "hr":   65.0,  "hr_s":   11.0,
     "rmssd":40.0,  "rmssd_s":9.0,
     "vel":   1.7,  "vel_s":  0.70,
     "p_rumia": 0.52,
@@ -53,7 +53,7 @@ BASE = {
 
 DELTA = {
     "temp":    +1.8,
-    "hr":      +26.0,
+    "hr":      +12.0,
     "rmssd":   -26.0,
     "vel":      -1.3,
     "p_rumia": -0.42,
@@ -285,7 +285,7 @@ df.sample(200, random_state=42).sort_values("timestamp").to_csv(
 
 # Test: BOV_018 regenerada de cero (no filtrada del dataset)
 # Re-generamos solo esa vaca con el mismo seed para consistencia
-np.random.seed(99)
+np.random.seed(22)
 cfg_test = {"infectados": True, "inicio": 24, "max_prog": 1.0}
 lat0t = -34.6037 + np.random.uniform(-0.08, 0.08)
 lon0t = -60.9265 + np.random.uniform(-0.08, 0.08)
