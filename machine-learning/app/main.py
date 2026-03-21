@@ -30,6 +30,11 @@ def startup_event() -> None:
     load_model()
 
 
+@app.get("/")
+def root() -> dict:
+    return {"service": "damp-ai", "status": "ok"}
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}

@@ -28,6 +28,20 @@ def _resolve_model_path() -> Path:
     return candidates[0]
 
 
+def _extract_predictor(loaded_obj: Any) -> Any:
+    if isinstance(loaded_obj, dict):
+        for key in ("model", "estimator", "clf", "classifier"):
+            candidate = loaded_obj.get(key)
+            if candidate is not None:
+                loaded_obj = candidate
+                break
+
+    if not hasattr(loaded_obj, "predict"):
+        raise TypeError("Loaded model object does not implement predict()")
+
+    return loaded_obj
+
+
 @lru_cache(maxsize=1)
 def load_model() -> Any:
     model_path = _resolve_model_path()
@@ -41,7 +55,9 @@ def load_model() -> Any:
 
     logger.info("Loading model from %s", model_path)
     with model_path.open("rb") as model_file:
-        model = pickle.load(model_file)
+        loaded_obj = pickle.load(model_file)
+
+    model = _extract_predictor(loaded_obj)
 
     logger.info("Model loaded successfully")
     return model
