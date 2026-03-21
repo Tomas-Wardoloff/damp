@@ -1,49 +1,80 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
-import { BrainCircuit, AlertTriangle } from "lucide-react"
+"use client"
 
-interface DiagnosisPanelProps extends React.HTMLAttributes<HTMLDivElement> {
-  condition: string
+import { AlertTriangle, CheckCircle, Info } from "lucide-react"
+import { DIAGNOSIS_CONTENT, URGENCY_CONFIG, type CowStatus } from "@/types"
+import { cn } from "@/lib/utils"
+
+interface Props {
+  status: CowStatus
   confidence: number
-  recommendation: string
+  className?: string
 }
 
-export function DiagnosisPanel({ condition, confidence, recommendation, className, ...props }: DiagnosisPanelProps) {
+export function DiagnosisPanel({ status, confidence, className }: Props) {
+  const content = DIAGNOSIS_CONTENT[status] ?? DIAGNOSIS_CONTENT["HEALTHY"]
+  const urgency = URGENCY_CONFIG[content.urgency]
+  const confPercent = Math.round(confidence * 100)
+
+  const UrgencyIcon =
+    content.urgency === "none" ? CheckCircle :
+      content.urgency === "high" ? AlertTriangle :
+        Info
+
   return (
-    <div className={cn("relative overflow-hidden bg-surface-container-low p-6 rounded-lg border border-outline-variant flex flex-col gap-4", className)} {...props}>
-      <div className="absolute -right-10 -top-10 text-outline-variant/5">
-        <BrainCircuit className="w-48 h-48" />
-      </div>
-      
-      <div className="flex items-center justify-between relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="bg-surface p-2 rounded-md border border-outline-variant/30 text-primary">
-            <BrainCircuit className="w-5 h-5" />
-          </div>
-          <h3 className="text-label-md uppercase tracking-widest text-on-surface-variant">Diagnóstico Predictivo IA</h3>
+    <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-low overflow-hidden">
+
+      {/* Header strip — urgency color */}
+      <div className="p-6 flex items-center justify-between border-b border-outline-variant/30">
+        <div className="flex items-center gap-2">
+          <span className="text-headline-md font-display mb-1">
+            Diagnóstico con IA
+          </span>
         </div>
-        
-        <div className="flex flex-col items-end">
-          <span className="text-display-lg text-primary leading-none">{confidence}%</span>
-          <span className="text-label-sm uppercase font-mono text-on-surface-variant tracking-wider">Confianza del Modelo</span>
-        </div>
+        <span className={cn("text-xs font-bold px-2.5 py-1 rounded-full border", urgency.bg, urgency.color, urgency.border)}>
+          {urgency.label}
+        </span>
       </div>
 
-      <div className="relative z-10 flex flex-col gap-2 mt-2">
-        <h4 className="text-headline-md font-display text-on-surface leading-snug">
-          {condition}
-        </h4>
-        
-        <div className="bg-surface p-4 rounded-md border-l-2 border-secondary/50 flex gap-3 items-start mt-2">
-          <AlertTriangle className="w-5 h-5 text-secondary shrink-0 mt-0.5" />
+      <div className="p-5 flex flex-col gap-5">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <span className="text-label-sm block uppercase font-mono text-secondary mb-1">Acción Recomendada</span>
-            <p className="text-body-md text-on-surface leading-relaxed">
-              {recommendation}
+            <h3 className="text-xl font-semibold text-on-surface">{content.label}</h3>
+            <p className="mt-1 text-sm text-on-surface-variant">{content.summary}</p>
+          </div>
+
+          <div className="shrink-0 flex flex-col items-center gap-1">
+            <p className="text-6xl font-bold tracking-tighter tabular-nums">
+              {confPercent}%
+            </p>
+            <span className="text-xs text-on-surface-variant/70 text-center leading-tight">
+              confianza del modelo
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-on-surface-variant mb-2">
+            Qué significa
+          </p>
+          <p className="text-sm text-on-surface leading-relaxed">
+            {content.what_it_means}
+          </p>
+        </div>
+
+        {/* Recommendation */}
+        <div className={cn("rounded-xl border p-4 flex gap-3 items-start", urgency.bg, urgency.border)}>
+          <UrgencyIcon className={cn("w-4 h-4 mt-0.5 shrink-0", urgency.color)} />
+          <div>
+            <p className={cn("text-xs font-semibold uppercase tracking-wider mb-1", urgency.color)}>
+              Acción recomendada
+            </p>
+            <p className="text-sm text-on-surface leading-relaxed">
+              {content.recommendation}
             </p>
           </div>
         </div>
+
       </div>
-    </div>
+    </div >
   )
 }

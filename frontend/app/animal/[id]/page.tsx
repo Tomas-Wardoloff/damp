@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Stethoscope, Activity, ArrowLeft } from "lucide-react"
+import { IterationCcwIcon, Activity, ArrowLeft } from "lucide-react"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { BiometricCards } from "@/components/animal/BiometricCards"
 import { BiometricChart } from "@/components/animal/BiometricChart"
@@ -10,7 +10,6 @@ import { DiagnosisPanel } from "@/components/animal/DiagnosisPanel"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
-import { HealthHistoryTimeline } from "@/components/animal/HealthHistoryTimeline"
 import { CowStatus } from "@/types"
 
 export default function AnimalDetail() {
@@ -51,13 +50,13 @@ export default function AnimalDetail() {
   if (!data) {
     return (
       <div className="flex flex-col h-screen text-on-surface bg-surface items-center justify-center gap-4">
-        <p className="font-mono text-label-md text-tertiary">Error: Animal no encontrado en el servidor.</p>
+        <p className="font-mono text-label-md text-tertiary">Error: Animal no encontrado.</p>
         <Button variant="secondary" onClick={() => router.back()}>Volver al Dashboard</Button>
       </div>
     )
   }
 
-  const { animal, chartData, healthStatus, healthHistory, prediction } = data
+  const { animal, chartData, healthStatus, prediction } = data
 
   function formatTimeInSystem(dateString: string) {
     if (!dateString) return "Desconocido";
@@ -80,10 +79,27 @@ export default function AnimalDetail() {
   const biometricsStatus = isCritical ? ("critical" as const) : animal.status === "warning" ? ("warning" as const) : ("normal" as const)
 
   const biometrics = {
-    temperature: { value: animal.temperature, status: biometricsStatus },
-    heartRate: { value: animal.heartRate, status: biometricsStatus },
-    distance: { value: animal.distance, status: biometricsStatus },
-    rumination: { value: animal.rumination, status: isCritical ? ("low" as const) : ("normal" as const) }
+    temperature: {
+      value: typeof animal.temperature === 'number' ? animal.temperature.toFixed(1) : animal.temperature,
+      status: (animal.temperature >= 38.0 && animal.temperature <= 39.2) ? "normal" as const : "high" as const
+    },
+    heartRate: {
+      value: animal.heartRate,
+      status: (animal.heartRate >= 48 && animal.heartRate <= 84) ? "normal" as const : "high" as const
+    },
+    distance: {
+      value: animal.distance,
+      status: "normal" as const
+    },
+    stress: getStressLevel(animal.rmssd || 0, animal.sdnn || 0),
+    rumination: {
+      value: animal.rumination ? "Con rumia" : "Sin rumia",
+      status: animal.rumination ? "normal" as const : "high" as const
+    },
+    vocalization: {
+      value: animal.vocalization ? "Detectada" : "No detectada",
+      status: animal.vocalization ? "high" as const : "normal" as const
+    }
   }
 
   // If backend returned less than 2 data points, we can't draw a line very well. Use fake history if needed.
@@ -123,15 +139,15 @@ export default function AnimalDetail() {
   return (
     <div className="flex flex-col h-screen overflow-y-auto text-on-surface bg-surface">
       <PageHeader
-        title={`Animal #${animal.id}`}
-        description={`Última act: ${animal.lastUpdated}`}
+        title={`Vaca #${animal.id} - ${animal.breed}`}
+        description={`Registrada hace: ${formatTimeInSystem(animal.registrationDate)} | Ultima Act: ${animal.lastUpdated}`}
       />
 
       <div className="p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => router.back()} 
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.back()}
           className="w-fit -ml-2 text-on-surface-variant hover:text-on-surface"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -141,11 +157,11 @@ export default function AnimalDetail() {
         <div className="flex items-center justify-between bg-surface-container-low p-4 rounded-lg border border-outline-variant/50">
           <div className="flex items-center gap-3">
             <span className="text-body-md font-medium text-on-surface-variant">Estado actual:</span>
-            {animal.status && <StatusBadge status={animal.status as "healthy" | "warning" | "critical"} pulse={animal.status !== 'healthy'} />}
+            <StatusBadge status={animal.status} pulse={animal.status !== 'sana'} />
           </div>
           <Button variant="primary" className="gap-2 w-fit">
-            <Stethoscope className="w-4 h-4" />
-            REGISTRAR INTERVENCIÓN
+            <IterationCcwIcon className="w-4 h-4" />
+            Realizar Analisis
           </Button>
         </div>
         <section>
@@ -157,20 +173,25 @@ export default function AnimalDetail() {
             data={displayChartData}
             metricName="Temperatura Corporal"
             normalRange={[38.0, 39.2]}
-            color={isCritical ? "var(--color-tertiary)" : "var(--color-secondary)"}
           />
         </section>
 
         <section className="mt-4">
-          <DiagnosisPanel
-            condition={conditionStr}
-            confidence={confPercent}
-            recommendation={recomStr}
-          />
-        </section>
-
-        <section className="mt-4">
-          <HealthHistoryTimeline history={healthHistory} />
+          {!healthStatus ? (
+            <div className="bg-surface-container-low p-6 rounded-lg border border-dashed border-outline-variant/40 flex flex-col items-center justify-center gap-1 text-center py-12">
+              <span className="text-on-surface-variant font-mono text-label-md uppercase tracking-widest">
+                Datos Insuficientes
+              </span>
+              <p className="text-on-surface-variant text-body-sm max-w-md mt-1 opacity-70">
+                El modelo predictivo de IA requiere un mínimo de 5 lecturas recientes para procesar y emitir un diagnóstico confiable.
+              </p>
+            </div>
+          ) : (
+            <DiagnosisPanel
+              status={healthStatus.status as CowStatus}
+              confidence={healthStatus.confidence}
+            />
+          )}
         </section>
       </div>
     </div>
