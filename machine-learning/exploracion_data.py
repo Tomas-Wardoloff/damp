@@ -1,36 +1,34 @@
 """
-exploracion_data.py
-═══════════════════
-Exploración visual de datos ANTES de entrenar.
-Compara dos clases a la vez sobre la línea temporal y sus distribuciones
-de features (raw + features de ventana).
+explore_windows.py
+──────────────────
+Exploración visual del pipeline de feature engineering del modelo de mastitis.
+Genera plots comparativos entre vacas mostrando cómo se construyen las ventanas
+y cómo se asignan los labels en contraste con el timeline de cada animal.
 
-Uso rápido:
-    python exploracion_data.py
-
-Uso desde código:
-    from exploracion_data import run_exploration
-    run_exploration(df, pairs=[("sana", "mastitis"), ("sana", "celo")])
+Uso:
+    python explore_windows.py
+    python explore_windows.py --csv data/damp_data_temporal.csv
+    python explore_windows.py --animal 1042 1055       # filtrar vacas específicas
+    python explore_windows.py --out mi_carpeta/        # cambiar directorio de salida
 """
 
-from __future__ import annotations
-from itertools import combinations
+import argparse
 from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
 
-import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
-from matplotlib.collections import LineCollection
-from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.gridspec as gridspec
+from matplotlib.collections import LineCollection
+from matplotlib.ticker import MaxNLocator
+import matplotlib.dates as mdates
 
-# ── Constantes (deben coincidir con train.py) ─────────────────────────────────
-
+# ─── Mismos parámetros que el modelo ────────────────────────────────────────
 CSV_PATH    = "data/damp_data_temporal.csv"
-OUT_DIR     = "models/nuevas-clases/exploracion"
-WINDOW_SIZE = 100          # misma ventana que train.py
+WINDOW_SIZE = 80
 STEP_SIZE   = 30
 SEED        = 42
 
@@ -45,26 +43,15 @@ NUMERIC_FEATURES = [
 BOOL_FEATURES = ["hubo_rumia", "hubo_vocalizacion"]
 
 LABEL_COLORS = {
-    "sana":      "#2ecc71",
-    "mastitis":  "#e74c3c",
-    "celo":      "#9b59b6",
-    "febril":    "#e67e22",
-    "digestivo": "#1abc9c",
+    "sana":       "#2ecc71",
+    "mastitis":   "#e74c3c",
+    "celo":       "#9b59b6",
+    "febril":     "#e67e22",
+    "digestivo":  "#1abc9c",
 }
+UNKNOWN_COLOR = "#95a5a6"
 
-# Pares de clases a comparar. Máximo 2 por plot para que sea legible.
-DEFAULT_PAIRS = [
-    ("sana", "mastitis"),
-    ("sana", "celo"),
-    ("sana", "febril"),
-    ("sana", "digestivo"),
-    ("mastitis", "celo"),
-    ("mastitis", "febril"),
-    ("celo", "febril"),
-]
-
-
-# ── Lógica de features (idéntica a train.py) ──────────────────────────────────
+# ─── Feature engineering (idéntico al modelo) ────────────────────────────────
 
 def extract_window_features(window: pd.DataFrame) -> dict:
     feats = {}
@@ -72,8 +59,6 @@ def extract_window_features(window: pd.DataFrame) -> dict:
     x = np.arange(n)
 
     for col in NUMERIC_FEATURES:
-        if col not in window.columns:
-            continue
         vals = window[col].values.astype(float)
         feats[f"{col}_mean"]      = np.mean(vals)
         feats[f"{col}_std"]       = np.std(vals)
@@ -87,8 +72,6 @@ def extract_window_features(window: pd.DataFrame) -> dict:
         feats[f"{col}_crossings"] = int(np.sum(np.diff(np.sign(vals - np.mean(vals))) != 0))
 
     for col in BOOL_FEATURES:
-        if col not in window.columns:
-            continue
         vals = window[col].values.astype(float)
         feats[f"{col}_rate"]   = np.mean(vals)
         feats[f"{col}_last10"] = np.mean(vals[-10:])
@@ -102,468 +85,670 @@ def extract_window_features(window: pd.DataFrame) -> dict:
         hours = pd.to_datetime(window["timestamp"]).dt.hour.values
         feats["hour_mean"]        = np.mean(hours)
         feats["night_ratio"]      = np.mean((hours >= 22) | (hours <= 5))
-        if "metros_recorridos" in window.columns:
-            night_mask = (hours >= 22) | (hours <= 5)
-            feats["metro_night_mean"] = (
-                np.mean(window["metros_recorridos"].values[night_mask])
-                if night_mask.any() else 0.0
-            )
+        feats["metro_night_mean"] = np.mean(
+            window["metros_recorridos"].values[(hours >= 22) | (hours <= 5)]
+        ) if np.any((hours >= 22) | (hours <= 5)) else 0.0
 
     return feats
 
 
-def build_windowed_dataset(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Construye el dataset de ventanas igual que train.py y devuelve
-    un DataFrame con todas las features + columna 'label' y 'animal_id'.
-    """
+def build_windowed_dataset(df: pd.DataFrame):
+    """Genera las ventanas con su label dominante — igual que en train."""
     records = []
     for animal_id, group in df.groupby("animal_id"):
         group = group.sort_values("timestamp").reset_index(drop=True)
-        n     = len(group)
+        n = len(group)
         for start in range(0, n - WINDOW_SIZE + 1, STEP_SIZE):
-            window      = group.iloc[start : start + WINDOW_SIZE]
-            label       = window["label"].value_counts().index[0]
-            feats       = extract_window_features(window)
-            feats["label"]     = label
-            feats["animal_id"] = animal_id
+            window = group.iloc[start: start + WINDOW_SIZE]
+            label_counts = window["label"].value_counts()
+            dominant_label = label_counts.index[0]
+            label_dist     = label_counts / label_counts.sum()  # distribución
+
+            feats = extract_window_features(window)
+            feats["animal_id"]      = animal_id
+            feats["window_start"]   = window["timestamp"].iloc[0]
+            feats["window_end"]     = window["timestamp"].iloc[-1]
+            feats["window_center"]  = window["timestamp"].iloc[WINDOW_SIZE // 2]
+            feats["label"]          = dominant_label
+            feats["label_purity"]   = label_dist.iloc[0]  # fracción del label dominante
+            feats["label_n_unique"] = label_counts.nunique()
             records.append(feats)
 
     return pd.DataFrame(records)
 
 
-# ── Helpers gráficos ──────────────────────────────────────────────────────────
+# ─── Helpers de plot ─────────────────────────────────────────────────────────
 
-def _label_band(ax, labels_arr: np.ndarray, color_a: str, color_b: str,
-                cls_a: str, cls_b: str, alpha: float = 0.18) -> None:
-    """Pinta banda de fondo solo para cls_a y cls_b; el resto queda gris claro."""
-    n    = len(labels_arr)
-    prev = labels_arr[0]
-    seg  = 0
-    for i in range(1, n + 1):
-        cur = labels_arr[i] if i < n else None
-        if cur != prev or i == n:
-            if prev == cls_a:
-                ax.axvspan(seg, i - 1, color=color_a, alpha=alpha, linewidth=0)
-            elif prev == cls_b:
-                ax.axvspan(seg, i - 1, color=color_b, alpha=alpha, linewidth=0)
-            seg = i
-        prev = cur
-    ax.set_xlim(0, n)
+def label_color(lbl):
+    return LABEL_COLORS.get(str(lbl).lower(), UNKNOWN_COLOR)
 
 
-def _colored_line(ax, t: np.ndarray, vals: np.ndarray,
-                  labels_arr: np.ndarray,
-                  color_a: str, color_b: str,
-                  cls_a: str, cls_b: str) -> None:
-    """Línea de la serie coloreada por clase; gris para el resto."""
-    def _col(lbl):
-        if lbl == cls_a:   return color_a
-        if lbl == cls_b:   return color_b
-        return "#cccccc"
-
-    points = np.array([t, vals]).T.reshape(-1, 1, 2)
-    segs   = np.concatenate([points[:-1], points[1:]], axis=1)
-    colors = [_col(labels_arr[i]) for i in range(len(t) - 1)]
-    lc     = LineCollection(segs, colors=colors, linewidths=0.9, alpha=0.9)
-    ax.add_collection(lc)
-    ax.autoscale_view()
+def _fmt_feature(name: str) -> str:
+    return (name
+            .replace("temperatura_corporal_prom", "Temp corporal")
+            .replace("frec_cardiaca_prom",         "Frec. cardíaca")
+            .replace("metros_recorridos",           "Metros recorridos")
+            .replace("velocidad_movimiento_prom",   "Velocidad mov.")
+            .replace("_mean",   " (mean)")
+            .replace("_std",    " (std)")
+            .replace("_slope",  " (slope)")
+            .replace("_last10", " (last10)")
+            .replace("_range",  " (range)")
+            )
 
 
-def _mean_segments(ax, t: np.ndarray, labels_arr: np.ndarray,
-                   cls: str, mean_val: float, std_val: float,
-                   color: str) -> None:
-    """Línea de media ± std por cada segmento continuo de 'cls'."""
-    in_seg = False
-    seg_s  = 0
-    for i in range(len(labels_arr) + 1):
-        cur = labels_arr[i] if i < len(labels_arr) else None
-        if cur == cls and not in_seg:
-            seg_s, in_seg = i, True
-        elif cur != cls and in_seg:
-            ax.hlines(mean_val, seg_s, i - 1,
-                      colors=color, linewidths=2.0, alpha=0.95, zorder=4)
-            ax.fill_between(range(seg_s, i),
-                            mean_val - std_val, mean_val + std_val,
-                            color=color, alpha=0.15, zorder=3)
-            in_seg = False
+def add_label_background(ax, times, labels, alpha=0.12):
+    """Colorea el fondo del eje según el label real en cada timestamp."""
+    if len(times) == 0:
+        return
+    prev_lbl = labels[0]
+    seg_start = times[0]
+    for t, lbl in zip(times[1:], labels[1:]):
+        if lbl != prev_lbl:
+            ax.axvspan(seg_start, t,
+                       color=label_color(prev_lbl), alpha=alpha, linewidth=0)
+            seg_start = t
+            prev_lbl  = lbl
+    ax.axvspan(seg_start, times[-1],
+               color=label_color(prev_lbl), alpha=alpha, linewidth=0)
 
 
-def _short_name(feat: str) -> str:
-    return (feat
-            .replace("temperatura_corporal_prom", "temp")
-            .replace("frec_cardiaca_prom", "frec_card")
-            .replace("metros_recorridos", "metros")
-            .replace("velocidad_movimiento_prom", "veloc")
-            .replace("hubo_", "")
-            .replace("_prom", "")
-            .replace("_mean", "·μ")
-            .replace("_std",  "·σ")
-            .replace("_last10", "·l10")
-            .replace("_slope", "·slope")
-            .replace("_rate", "·rate")
-            .replace("_range", "·rng")
-            .replace("_", " "))
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 1 — Timeline completo de cada animal
+# ═══════════════════════════════════════════════════════════════════════════════
 
-
-# ── Plot principal: contraste de 2 clases ─────────────────────────────────────
-
-def plot_pair_contrast(
-    df_raw: pd.DataFrame,
-    df_win: pd.DataFrame,
-    cls_a: str,
-    cls_b: str,
-    animal_id: str | None = None,
-    out_dir: str = OUT_DIR,
-) -> None:
+def plot_animal_timelines(df: pd.DataFrame, animals: list, out_dir: Path):
     """
-    Dashboard de contraste entre cls_a y cls_b. Máximo 2 clases por plot.
-
-    Estructura:
-      Fila 0  — Banda de timeline (toda la serie del animal)
-      Filas 1..N — Una fila por feature raw:
-                   · Serie temporal (col ancha) coloreada por las 2 clases
-                   · Violin de distribución de valores raw por clase (col angosta)
-      Última fila — Heatmap de solapamiento de features de ventana entre las 2 clases
-
-    Parámetros
-    ----------
-    df_raw   : DataFrame original (una fila = un registro de 5 min)
-    df_win   : DataFrame de ventanas construido por build_windowed_dataset()
-    cls_a    : primera clase a comparar
-    cls_b    : segunda clase a comparar
-    animal_id: si se pasa, filtra solo ese animal; si es None usa todos
-    out_dir  : carpeta de salida
+    Para cada vaca: panel con las señales numéricas + banda de color según label real
+    + marcas verticales mostrando dónde caen las ventanas y qué label se le asignó.
     """
-    color_a = LABEL_COLORS.get(cls_a, "#555")
-    color_b = LABEL_COLORS.get(cls_b, "#999")
-
-    Path(out_dir).mkdir(parents=True, exist_ok=True)
-
-    # ── Filtrar datos ─────────────────────────────────────────────────────────
-    if animal_id:
-        raw = (df_raw[df_raw["animal_id"] == animal_id]
-               .sort_values("timestamp").reset_index(drop=True))
-        win = df_win[df_win["animal_id"] == animal_id].copy()
-        title_suffix = f"Animal: {animal_id}"
-    else:
-        # Tomar el primer animal que tenga AMBAS clases (más representativo)
-        raw, win = _find_best_animal(df_raw, df_win, cls_a, cls_b)
-        title_suffix = f"Animal: {raw['animal_id'].iloc[0]}"
-
-    labels_arr = raw["label"].values
-    n          = len(raw)
-    t          = np.arange(n)
-
-    # Solo filas que pertenecen a una de las dos clases (para los violines)
-    mask_a_raw = labels_arr == cls_a
-    mask_b_raw = labels_arr == cls_b
-    mask_a_win = win["label"] == cls_a
-    mask_b_win = win["label"] == cls_b
-
-    # Features raw disponibles
-    raw_feats = [f for f in NUMERIC_FEATURES + BOOL_FEATURES
-                 if f in raw.columns]
-
-    # ── Layout ────────────────────────────────────────────────────────────────
-    n_feat_rows = len(raw_feats)
-    n_rows      = 1 + n_feat_rows + 1          # timeline + feats + heatmap
-    fig = plt.figure(figsize=(22, 2.6 * n_rows + 1))
-    fig.suptitle(
-        f"Contraste de clases:  [{cls_a}]  vs  [{cls_b}]  —  {title_suffix}\n"
-        f"Ventana: {WINDOW_SIZE} registros (~{WINDOW_SIZE * 5 // 60}h)  ·  "
-        f"Step: {STEP_SIZE}",
-        fontsize=13, fontweight="bold", y=1.005,
-    )
-    gs = gridspec.GridSpec(
-        n_rows, 2, figure=fig,
-        width_ratios=[3.2, 1],
-        hspace=0.07,
-        wspace=0.20,
-    )
-
-    # ── Fila 0: timeline de estados ───────────────────────────────────────────
-    ax_top = fig.add_subplot(gs[0, 0])
-    _label_band(ax_top, labels_arr, color_a, color_b, cls_a, cls_b, alpha=0.55)
-    ax_top.set_yticks([])
-    ax_top.set_xlim(0, n)
-    ax_top.set_xticklabels([])
-    ax_top.set_title(
-        f"Timeline de estados  ·  [{cls_a}]  vs  [{cls_b}]  "
-        f"(gris = otras clases)",
-        fontsize=9, pad=5,
-    )
-    legend_patches = [
-        Patch(color=color_a, alpha=0.75, label=cls_a),
-        Patch(color=color_b, alpha=0.75, label=cls_b),
-        Patch(color="#cccccc", alpha=0.75, label="otras clases"),
+    feats_to_plot = [
+        "temperatura_corporal_prom",
+        "frec_cardiaca_prom",
+        "metros_recorridos",
+        "rmssd",
     ]
-    ax_top.legend(handles=legend_patches, fontsize=8, ncol=3,
-                  loc="upper right", framealpha=0.9)
 
-    # col derecha fila 0: vacía (leyenda sola)
-    ax_leg = fig.add_subplot(gs[0, 1])
-    ax_leg.axis("off")
-    ax_leg.text(0.5, 0.5,
-                f"n={mask_a_raw.sum():,} reg [{cls_a}]\n"
-                f"n={mask_b_raw.sum():,} reg [{cls_b}]\n\n"
-                f"ventanas [{cls_a}]: {mask_a_win.sum()}\n"
-                f"ventanas [{cls_b}]: {mask_b_win.sum()}",
-                ha="center", va="center", fontsize=8,
-                color="#555", transform=ax_leg.transAxes)
+    for animal_id in animals:
+        adf = df[df["animal_id"] == animal_id].sort_values("timestamp").copy()
+        if len(adf) < WINDOW_SIZE:
+            print(f"  ⚠ Animal {animal_id}: sólo {len(adf)} registros, se omite.")
+            continue
 
-    # ── Filas 1..N: una por feature raw ──────────────────────────────────────
-    for row_i, feat in enumerate(raw_feats, start=1):
-        vals      = raw[feat].values.astype(float)
-        is_last_f = row_i == n_feat_rows
+        # Construir ventanas sólo para este animal
+        records = []
+        n = len(adf)
+        adf_reset = adf.reset_index(drop=True)
+        for start in range(0, n - WINDOW_SIZE + 1, STEP_SIZE):
+            window   = adf_reset.iloc[start: start + WINDOW_SIZE]
+            lbl_cnt  = window["label"].value_counts()
+            dom_lbl  = lbl_cnt.index[0]
+            purity   = lbl_cnt.iloc[0] / lbl_cnt.sum()
+            records.append({
+                "t_start":  window["timestamp"].iloc[0],
+                "t_end":    window["timestamp"].iloc[-1],
+                "t_center": window["timestamp"].iloc[WINDOW_SIZE // 2],
+                "label":    dom_lbl,
+                "purity":   purity,
+            })
+        wins = pd.DataFrame(records)
 
-        mean_a = vals[mask_a_raw].mean() if mask_a_raw.any() else np.nan
-        std_a  = vals[mask_a_raw].std()  if mask_a_raw.any() else 0.0
-        mean_b = vals[mask_b_raw].mean() if mask_b_raw.any() else np.nan
-        std_b  = vals[mask_b_raw].std()  if mask_b_raw.any() else 0.0
+        times  = adf["timestamp"].values
+        labels = adf["label"].values
 
-        # ── Serie temporal ────────────────────────────────────────────────
-        ax_s = fig.add_subplot(gs[row_i, 0], sharex=ax_top)
-        _label_band(ax_s, labels_arr, color_a, color_b, cls_a, cls_b, alpha=0.10)
-        _colored_line(ax_s, t, vals, labels_arr, color_a, color_b, cls_a, cls_b)
+        n_feats = len(feats_to_plot)
+        fig, axes = plt.subplots(
+            n_feats + 1, 1,
+            figsize=(16, 3.5 * (n_feats + 1)),
+            sharex=True,
+        )
+        fig.suptitle(
+            f"Animal {animal_id}  |  {len(adf):,} registros  |  "
+            f"{int(len(wins))} ventanas (w={WINDOW_SIZE}, step={STEP_SIZE})",
+            fontsize=13, fontweight="bold", y=1.001,
+        )
 
-        if mask_a_raw.any():
-            _mean_segments(ax_s, t, labels_arr, cls_a, mean_a, std_a, color_a)
-        if mask_b_raw.any():
-            _mean_segments(ax_s, t, labels_arr, cls_b, mean_b, std_b, color_b)
+        # ── Panel superior: label real + ventanas asignadas ──────────────────
+        ax0 = axes[0]
+        ax0.set_yticks([])
+        ax0.set_title("Labels reales (fondo) vs label asignado por ventana (triángulos)", fontsize=9)
 
-        # Anotación de medias
-        delta = abs(mean_a - mean_b) if not (np.isnan(mean_a) or np.isnan(mean_b)) else 0
-        ax_s.set_ylabel(_short_name(feat), fontsize=8, rotation=0,
-                        ha="right", va="center", labelpad=52)
-        ax_s.yaxis.set_major_locator(plt.MaxNLocator(4))
-        ax_s.tick_params(axis="y", labelsize=7)
-        ax_s.grid(axis="y", alpha=0.15, linewidth=0.5)
-        ax_s.spines[["top", "right"]].set_visible(False)
+        # Fondo con label real
+        add_label_background(ax0, times, labels, alpha=0.45)
 
-        if not is_last_f:
-            plt.setp(ax_s.get_xticklabels(), visible=False)
-        else:
-            ax_s.set_xlabel("Registro (índice temporal)", fontsize=8)
-            ax_s.tick_params(axis="x", labelsize=7)
-
-        # ── Violin de distribución por clase ──────────────────────────────
-        ax_v = fig.add_subplot(gs[row_i, 1])
-
-        data_plot = []
-        colors_v  = []
-        labels_v  = []
-        for cls, mask, col in [(cls_a, mask_a_raw, color_a),
-                               (cls_b, mask_b_raw, color_b)]:
-            d = vals[mask]
-            if len(d) > 1:
-                data_plot.append(d)
-                colors_v.append(col)
-                labels_v.append(cls)
-
-        positions_v = list(range(len(data_plot)))
-
-        if len(data_plot) >= 1:
-            parts = ax_v.violinplot(data_plot, positions=positions_v,
-                                    widths=0.55, showmedians=True,
-                                    showextrema=False)
-            for pc, col in zip(parts["bodies"], colors_v):
-                pc.set_facecolor(col)
-                pc.set_alpha(0.55)
-            parts["cmedians"].set_colors(colors_v)
-            parts["cmedians"].set_linewidth(2.0)
-
-            for pos, d, col in zip(positions_v, data_plot, colors_v):
-                ax_v.scatter(pos, np.mean(d), color=col, s=28,
-                             zorder=5, edgecolors="white", linewidths=0.6)
-
-            if len(data_plot) == 2:
-                ax_v.annotate(
-                    f"Δμ = {delta:.2f}",
-                    xy=(0.5, 0.97), xycoords="axes fraction",
-                    ha="center", va="top", fontsize=7,
-                    color="#555",
+        # Ventanas: línea de duración + triángulo coloreado por label dominante
+        for _, w in wins.iterrows():
+            c = label_color(w["label"])
+            ax0.plot(
+                [w["t_start"], w["t_end"]], [0.5, 0.5],
+                color=c, linewidth=2.5, alpha=0.55, solid_capstyle="round",
+            )
+            ax0.plot(
+                w["t_center"], 0.5,
+                marker="^", color=c, markersize=8,
+                markeredgecolor="white", markeredgewidth=0.6,
+                alpha=0.9,
+            )
+            # Pureza de label dentro de la ventana
+            if w["purity"] < 0.85:
+                ax0.text(
+                    w["t_center"], 0.62,
+                    f"{w['purity']:.0%}",
+                    ha="center", va="bottom", fontsize=5.5,
+                    color=c, fontweight="bold",
                 )
 
-        # ticks siempre alineados con los datos reales disponibles
-        ax_v.set_xticks(positions_v)
-        ax_v.set_xticklabels(labels_v, fontsize=7)
-        ax_v.yaxis.set_major_locator(plt.MaxNLocator(4))
-        ax_v.tick_params(axis="y", labelsize=7)
-        ax_v.grid(axis="y", alpha=0.15, linewidth=0.5)
-        ax_v.spines[["top", "right"]].set_visible(False)
-        if row_i == 1:
-            ax_v.set_title("Distribución\npor clase", fontsize=8, pad=4)
+        ax0.set_ylim(0, 1)
 
-    # ── Última fila: heatmap de solapamiento en features de ventana ───────────
-    ax_heat = fig.add_subplot(gs[n_rows - 1, :])
-    _plot_window_feature_overlap(ax_heat, win, cls_a, cls_b, color_a, color_b)
+        # Leyenda
+        handles = [mpatches.Patch(color=v, label=k) for k, v in LABEL_COLORS.items()]
+        ax0.legend(handles=handles, loc="upper right",
+                   fontsize=8, ncol=len(LABEL_COLORS))
 
-    # ── Guardar ───────────────────────────────────────────────────────────────
-    suffix = f"_{animal_id}" if animal_id else "_global"
-    fname  = f"contraste_{cls_a}_vs_{cls_b}{suffix}.png"
-    out    = Path(out_dir) / fname
-    plt.savefig(out, dpi=130, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Guardado: {out}")
+        # ── Paneles de señales numéricas ─────────────────────────────────────
+        for i, feat in enumerate(feats_to_plot):
+            if feat not in adf.columns:
+                continue
+            ax = axes[i + 1]
+            vals = adf[feat].values.astype(float)
+
+            # Fondo label real
+            add_label_background(ax, times, labels)
+
+            # Línea de la señal coloreada por label
+            segs  = []
+            colors_seg = []
+            for j in range(len(times) - 1):
+                segs.append([(times[j], vals[j]), (times[j+1], vals[j+1])])
+                colors_seg.append(label_color(labels[j]))
+            lc = LineCollection(segs, colors=colors_seg, linewidth=1.0, alpha=0.85)
+            ax.add_collection(lc)
+            ax.set_xlim(times[0], times[-1])
+            ax.set_ylim(np.nanmin(vals) * 0.98, np.nanmax(vals) * 1.02)
+
+            # Medias por ventana (puntos)
+            feat_mean_key = f"{feat}_mean"
+            if feat_mean_key in pd.DataFrame(
+                [extract_window_features(adf_reset.iloc[0: WINDOW_SIZE])]).columns:
+                for _, w in wins.iterrows():
+                    mask_w = (adf["timestamp"] >= w["t_start"]) & \
+                             (adf["timestamp"] <= w["t_end"])
+                    mean_v = adf.loc[mask_w, feat].mean()
+                    ax.plot(
+                        w["t_center"], mean_v,
+                        "D", color=label_color(w["label"]),
+                        markersize=5, alpha=0.7,
+                        markeredgecolor="white", markeredgewidth=0.5,
+                    )
+
+            ax.set_ylabel(_fmt_feature(feat), fontsize=8)
+            ax.grid(axis="y", alpha=0.2)
+            ax.yaxis.set_major_locator(MaxNLocator(4))
+
+        # Formato eje X
+        axes[-1].xaxis.set_major_formatter(mdates.DateFormatter("%d-%b\n%H:%M"))
+        axes[-1].xaxis.set_major_locator(mdates.AutoDateLocator())
+        plt.setp(axes[-1].xaxis.get_majorticklabels(), fontsize=7)
+
+        plt.tight_layout()
+        fpath = out_dir / f"timeline_animal_{animal_id}.png"
+        plt.savefig(fpath, dpi=140, bbox_inches="tight")
+        plt.close()
+        print(f"  ✅ {fpath}")
 
 
-def _plot_window_feature_overlap(
-    ax,
-    win: pd.DataFrame,
-    cls_a: str,
-    cls_b: str,
-    color_a: str,
-    color_b: str,
-) -> None:
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 2 — Comparativa de features entre vacas (ventanas)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def plot_feature_comparison(wins_df: pd.DataFrame, out_dir: Path):
     """
-    Barras horizontales de solapamiento por feature de ventana.
-    Cada barra muestra la diferencia normalizada de medias (effect size simple).
-    Una barra larga y de un solo color = buena separación.
-    Una barra corta o centrada = clases muy solapadas en esa feature.
+    Heatmap temporal de features agregadas por ventana para cada vaca,
+    lado a lado, con la barra de label dominante encima.
     """
-    mask_a = win["label"] == cls_a
-    mask_b = win["label"] == cls_b
+    feat_cols = [
+        "temperatura_corporal_prom_mean",
+        "frec_cardiaca_prom_mean",
+        "metros_recorridos_mean",
+        "rmssd_mean",
+        "sdnn_mean",
+        "velocidad_movimiento_prom_mean",
+        "hubo_rumia_rate",
+        "hubo_vocalizacion_rate",
+        "night_ratio",
+    ]
+    feat_cols = [c for c in feat_cols if c in wins_df.columns]
+    animals   = sorted(wins_df["animal_id"].unique())
+    n_animals = len(animals)
 
-    win_feats = [c for c in win.columns if c not in ("label", "animal_id")]
-
-    rows = []
-    for feat in win_feats:
-        vals_a = win.loc[mask_a, feat].dropna().values
-        vals_b = win.loc[mask_b, feat].dropna().values
-        if len(vals_a) < 2 or len(vals_b) < 2:
-            continue
-        mu_a, mu_b = vals_a.mean(), vals_b.mean()
-        pooled_std = np.sqrt((vals_a.std()**2 + vals_b.std()**2) / 2) + 1e-9
-        effect     = (mu_a - mu_b) / pooled_std   # Cohen's d simplificado
-        rows.append({"feat": feat, "effect": effect, "mu_a": mu_a, "mu_b": mu_b})
-
-    if not rows:
-        ax.axis("off")
+    if n_animals == 0:
+        print("  ⚠ Sin animales para comparar.")
         return
 
-    df_eff = (pd.DataFrame(rows)
-              .assign(abs_effect=lambda d: d["effect"].abs())
-              .sort_values("abs_effect", ascending=True))
-
-    # Mostrar top 20 para que sea legible
-    df_eff = df_eff.tail(20)
-
-    colors_bar = [color_a if e > 0 else color_b for e in df_eff["effect"]]
-    bars = ax.barh(range(len(df_eff)), df_eff["effect"], color=colors_bar,
-                   alpha=0.72, edgecolor="white", linewidth=0.4)
-
-    ax.set_yticks(range(len(df_eff)))
-    ax.set_yticklabels([_short_name(f) for f in df_eff["feat"]], fontsize=7)
-    ax.axvline(0, color="#888", linewidth=0.8, linestyle="--")
-    ax.axvline( 0.5, color="#bbb", linewidth=0.5, linestyle=":")
-    ax.axvline(-0.5, color="#bbb", linewidth=0.5, linestyle=":")
-    ax.set_xlabel("Cohen's d  (positivo → mayor en clase izquierda)", fontsize=8)
-    ax.set_title(
-        f"Separabilidad de features de ventana  ·  {cls_a} (←)  vs  {cls_b} (→)\n"
-        "Barras más largas = mejor discriminación  ·  Top 20 features ordenadas por separabilidad",
-        fontsize=8, pad=5,
+    fig, axes = plt.subplots(
+        len(feat_cols) + 1, n_animals,
+        figsize=(max(4, 3.5 * n_animals), 2.8 * (len(feat_cols) + 1)),
+        squeeze=False,
     )
-    ax.grid(axis="x", alpha=0.2, linewidth=0.5)
-    ax.spines[["top", "right"]].set_visible(False)
+    fig.suptitle(
+        "Comparativa de features por ventana entre animales\n"
+        "(cada columna = una vaca | cada fila = un feature | color superior = label dominante)",
+        fontsize=12, fontweight="bold", y=1.002,
+    )
 
-    legend_patches = [
-        Patch(color=color_a, alpha=0.72, label=f"mayor en {cls_a}"),
-        Patch(color=color_b, alpha=0.72, label=f"mayor en {cls_b}"),
+    for col_i, animal_id in enumerate(animals):
+        adf = wins_df[wins_df["animal_id"] == animal_id].copy()
+        adf = adf.sort_values("window_center").reset_index(drop=True)
+        n_wins = len(adf)
+        x_idx  = np.arange(n_wins)
+
+        # ── Banda de label ────────────────────────────────────────────────────
+        ax_top = axes[0][col_i]
+        for i, row in adf.iterrows():
+            ax_top.barh(
+                0, 1, left=i, height=1,
+                color=label_color(row["label"]),
+                alpha=max(0.3, row["label_purity"]),
+            )
+        ax_top.set_xlim(0, n_wins)
+        ax_top.set_yticks([])
+        ax_top.set_title(f"Animal {animal_id}\n({n_wins} ventanas)", fontsize=9)
+        ax_top.set_xticks([])
+        if col_i == 0:
+            ax_top.set_ylabel("Label\ndominante", fontsize=7)
+
+        # ── Heatmap de cada feature ───────────────────────────────────────────
+        for row_i, feat in enumerate(feat_cols):
+            ax = axes[row_i + 1][col_i]
+            if feat not in adf.columns or adf[feat].isna().all():
+                ax.set_visible(False)
+                continue
+
+            vals = adf[feat].values.astype(float)
+            # Normalizar por animal para comparación visual
+            v_min, v_max = np.nanmin(vals), np.nanmax(vals)
+            v_range = v_max - v_min if v_max != v_min else 1.0
+            norm_vals = (vals - v_min) / v_range
+
+            ax.imshow(
+                norm_vals.reshape(1, -1),
+                aspect="auto", cmap="RdYlGn",
+                vmin=0, vmax=1,
+                interpolation="nearest",
+            )
+
+            # Superponer marcas de cambio de label
+            for i in range(1, len(adf)):
+                if adf["label"].iloc[i] != adf["label"].iloc[i - 1]:
+                    ax.axvline(i - 0.5, color="white", linewidth=1.5, alpha=0.9)
+
+            # Valor real en texto si pocas ventanas
+            if n_wins <= 30:
+                for xi, v in enumerate(vals):
+                    ax.text(xi, 0, f"{v:.1f}",
+                            ha="center", va="center",
+                            fontsize=4.5, color="black")
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if col_i == 0:
+                ax.set_ylabel(_fmt_feature(feat), fontsize=7, labelpad=2)
+
+    plt.tight_layout()
+    fpath = out_dir / "comparativa_features_vacas.png"
+    plt.savefig(fpath, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  ✅ {fpath}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 3 — Pureza de label por ventana (¿cuánto se mezclan las clases?)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def plot_label_purity(wins_df: pd.DataFrame, out_dir: Path):
+    """
+    Scatter: eje X = tiempo de la ventana, eje Y = pureza del label dominante.
+    Color = label dominante. Una vaca por subplot.
+    Muestra dónde hay transiciones ambiguas entre estados.
+    """
+    animals = sorted(wins_df["animal_id"].unique())
+    n = len(animals)
+    ncols = min(3, n)
+    nrows = int(np.ceil(n / ncols))
+
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(6 * ncols, 3.5 * nrows),
+        squeeze=False,
+    )
+    fig.suptitle(
+        "Pureza del label dominante por ventana\n"
+        "Puntos bajos = ventanas con mezcla de clases (transiciones)",
+        fontsize=12, fontweight="bold",
+    )
+
+    for idx, animal_id in enumerate(animals):
+        row, col = divmod(idx, ncols)
+        ax = axes[row][col]
+
+        adf = wins_df[wins_df["animal_id"] == animal_id].sort_values("window_center")
+        for lbl, grp in adf.groupby("label"):
+            ax.scatter(
+                grp["window_center"], grp["label_purity"],
+                c=label_color(lbl), label=lbl,
+                s=35, alpha=0.75, edgecolors="white", linewidths=0.4,
+            )
+
+        ax.axhline(0.85, color="gray", linestyle="--",
+                   linewidth=0.8, alpha=0.5, label="85% pureza")
+        ax.set_ylim(0, 1.05)
+        ax.set_title(f"Animal {animal_id}", fontsize=9)
+        ax.set_ylabel("Pureza", fontsize=8)
+        ax.grid(alpha=0.2)
+        ax.xaxis.set_major_formatter(mdates.DateFormatter("%d-%b"))
+        plt.setp(ax.xaxis.get_majorticklabels(), fontsize=6, rotation=30)
+        ax.legend(fontsize=6, loc="lower right")
+
+    # Ocultar ejes vacíos
+    for idx in range(len(animals), nrows * ncols):
+        row, col = divmod(idx, ncols)
+        axes[row][col].set_visible(False)
+
+    plt.tight_layout()
+    fpath = out_dir / "pureza_labels_por_ventana.png"
+    plt.savefig(fpath, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  ✅ {fpath}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 4 — Distribución de features por label (violinplot global)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def plot_feature_by_label(wins_df: pd.DataFrame, out_dir: Path):
+    """
+    Para cada feature clave: violinplot separado por label.
+    Permite ver si el feature discrimina bien entre clases.
+    """
+    feat_cols = [
+        "temperatura_corporal_prom_mean",
+        "frec_cardiaca_prom_mean",
+        "metros_recorridos_mean",
+        "rmssd_mean",
+        "sdnn_mean",
+        "velocidad_movimiento_prom_mean",
+        "hubo_rumia_rate",
+        "night_ratio",
     ]
-    ax.legend(handles=legend_patches, fontsize=7, loc="lower right")
+    feat_cols = [c for c in feat_cols if c in wins_df.columns]
+    labels    = sorted(wins_df["label"].dropna().unique())
+    colors    = [label_color(l) for l in labels]
+
+    ncols = 2
+    nrows = int(np.ceil(len(feat_cols) / ncols))
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(10, 4 * nrows),
+        squeeze=False,
+    )
+    fig.suptitle(
+        "Distribución de features por clase (todas las vacas)\n"
+        "Solapamiento alto = feature poco discriminativo para esa clase",
+        fontsize=12, fontweight="bold",
+    )
+
+    for idx, feat in enumerate(feat_cols):
+        row, col = divmod(idx, ncols)
+        ax = axes[row][col]
+
+        data_by_label = [
+            wins_df.loc[wins_df["label"] == lbl, feat].dropna().values
+            for lbl in labels
+        ]
+        valid = [(d, l, c) for d, l, c in zip(data_by_label, labels, colors) if len(d) > 1]
+        if not valid:
+            ax.set_visible(False)
+            continue
+
+        parts = ax.violinplot(
+            [v[0] for v in valid],
+            positions=range(len(valid)),
+            showmedians=True,
+            showextrema=True,
+        )
+        for i, pc in enumerate(parts["bodies"]):
+            pc.set_facecolor(valid[i][2])
+            pc.set_alpha(0.65)
+        for key in ("cmedians", "cbars", "cmins", "cmaxes"):
+            parts[key].set_color("black")
+            parts[key].set_linewidth(0.8)
+
+        ax.set_xticks(range(len(valid)))
+        ax.set_xticklabels([v[1] for v in valid], fontsize=8)
+        ax.set_title(_fmt_feature(feat), fontsize=9)
+        ax.grid(axis="y", alpha=0.2)
+
+    for idx in range(len(feat_cols), nrows * ncols):
+        row, col = divmod(idx, ncols)
+        axes[row][col].set_visible(False)
+
+    plt.tight_layout()
+    fpath = out_dir / "distribucion_features_por_label.png"
+    plt.savefig(fpath, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  ✅ {fpath}")
 
 
-def _find_best_animal(
-    df_raw: pd.DataFrame,
-    df_win: pd.DataFrame,
-    cls_a: str,
-    cls_b: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 5 — Evolución temporal de feature_mean coloreado por label (multi-animal)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def plot_temporal_feature_evolution(wins_df: pd.DataFrame, out_dir: Path):
     """
-    Devuelve el animal que tiene registros de AMBAS clases y mayor cantidad combinada.
-    Si ningún animal tiene las dos clases, usa el que tenga al menos una.
+    Para cada feature: una línea por animal, con puntos coloreados por label dominante.
+    El eje X es relativo (días desde primer registro) para alinear animales.
     """
-    # Candidatos que tienen al menos 1 registro de cada clase
-    has_a = set(df_raw[df_raw["label"] == cls_a]["animal_id"].unique())
-    has_b = set(df_raw[df_raw["label"] == cls_b]["animal_id"].unique())
-    both  = has_a & has_b
-
-    if both:
-        # Entre los que tienen las dos, elegir el de mayor cobertura combinada
-        mask   = df_raw["label"].isin([cls_a, cls_b]) & df_raw["animal_id"].isin(both)
-        counts = df_raw[mask].groupby("animal_id").size()
-    else:
-        # Fallback: cualquier animal con al menos una de las dos clases
-        mask   = df_raw["label"].isin([cls_a, cls_b])
-        counts = df_raw[mask].groupby("animal_id").size()
-
-    if counts.empty:
-        raise ValueError(f"No hay animales con las clases {cls_a} o {cls_b}")
-
-    best = counts.idxmax()
-    raw  = (df_raw[df_raw["animal_id"] == best]
-            .sort_values("timestamp").reset_index(drop=True))
-    win  = df_win[df_win["animal_id"] == best].copy()
-    return raw, win
-
-
-# ── Función principal de exploración ──────────────────────────────────────────
-
-def run_exploration(
-    df: pd.DataFrame,
-    pairs: list[tuple[str, str]] | None = None,
-    animal_id: str | None = None,
-    out_dir: str = OUT_DIR,
-) -> None:
-    """
-    Genera un plot de contraste por cada par de clases.
-
-    Parámetros
-    ----------
-    df        : DataFrame original cargado desde el CSV
-    pairs     : lista de tuplas (cls_a, cls_b). Si es None, usa DEFAULT_PAIRS
-                filtrando solo los pares que tengan datos en df.
-    animal_id : si se pasa, todos los plots se hacen para ese animal.
-                Si es None, se selecciona automáticamente el mejor animal por par.
-    out_dir   : carpeta de salida de los PNG
-    """
-    if pairs is None:
-        pairs = DEFAULT_PAIRS
-
-    classes_in_data = set(df["label"].unique())
-
-    # Filtrar pares que no tienen datos
-    pairs_ok = [
-        (a, b) for a, b in pairs
-        if a in classes_in_data and b in classes_in_data
+    feat_cols = [
+        "temperatura_corporal_prom_mean",
+        "frec_cardiaca_prom_mean",
+        "metros_recorridos_mean",
+        "rmssd_mean",
     ]
-    if not pairs_ok:
-        print("  ⚠️  Ninguno de los pares solicitados tiene datos en el DataFrame.")
-        return
+    feat_cols = [c for c in feat_cols if c in wins_df.columns]
+    animals   = sorted(wins_df["animal_id"].unique())
 
-    print(f"\n  Construyendo dataset de ventanas (window={WINDOW_SIZE}, step={STEP_SIZE})...")
-    df_win = build_windowed_dataset(df)
-    print(f"  → {len(df_win):,} ventanas · {df_win.shape[1] - 2} features de ventana")
+    ncols = 1
+    nrows = len(feat_cols)
+    fig, axes = plt.subplots(
+        nrows, ncols,
+        figsize=(16, 3.5 * nrows),
+        squeeze=False,
+    )
+    fig.suptitle(
+        "Evolución temporal de features por ventana — comparativa entre vacas\n"
+        "(eje X = días desde primer registro de cada animal | puntos coloreados por label)",
+        fontsize=12, fontweight="bold",
+    )
 
-    print(f"\n  Generando {len(pairs_ok)} plots de contraste → {out_dir}/\n")
-    for cls_a, cls_b in pairs_ok:
-        print(f"  [{cls_a}] vs [{cls_b}]")
-        try:
-            plot_pair_contrast(df, df_win, cls_a, cls_b,
-                               animal_id=animal_id, out_dir=out_dir)
-        except Exception as e:
-            print(f"    ⚠️  Error: {e}")
+    for row_i, feat in enumerate(feat_cols):
+        ax = axes[row_i][0]
 
-    print(f"\n  ✅ Exploración completa. Plots en: {out_dir}/")
+        for animal_id in animals:
+            adf = wins_df[wins_df["animal_id"] == animal_id].sort_values("window_center").copy()
+            if feat not in adf.columns or adf[feat].isna().all():
+                continue
+
+            # Tiempo relativo en días
+            t0 = adf["window_center"].min()
+            adf["days"] = (adf["window_center"] - t0).dt.total_seconds() / 86400
+
+            # Línea gris de fondo (continuidad)
+            ax.plot(adf["days"], adf[feat],
+                    color="gray", linewidth=0.7, alpha=0.25, zorder=1)
+
+            # Puntos coloreados por label
+            for lbl, grp in adf.groupby("label"):
+                ax.scatter(
+                    grp["days"], grp[feat],
+                    c=label_color(lbl), s=18,
+                    alpha=0.75, zorder=2,
+                    edgecolors="none",
+                )
+
+            # Etiqueta de animal al final
+            last = adf.iloc[-1]
+            ax.text(
+                last["days"] + 0.3, last[feat],
+                str(animal_id),
+                fontsize=5, color="gray", va="center",
+            )
+
+        ax.set_ylabel(_fmt_feature(feat), fontsize=9)
+        ax.grid(alpha=0.18)
+        ax.set_xlabel("Días desde primer registro", fontsize=8)
+
+        # Leyenda sólo en el primer subplot
+        if row_i == 0:
+            handles = [
+                mpatches.Patch(color=v, label=k)
+                for k, v in LABEL_COLORS.items()
+            ]
+            ax.legend(handles=handles, loc="upper right",
+                      fontsize=8, ncol=len(LABEL_COLORS))
+
+    plt.tight_layout()
+    fpath = out_dir / "evolucion_temporal_features.png"
+    plt.savefig(fpath, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  ✅ {fpath}")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# PLOT 6 — Resumen estadístico por animal y label
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def plot_animal_label_summary(df: pd.DataFrame, wins_df: pd.DataFrame, out_dir: Path):
+    """
+    Tabla visual: animales en filas, labels en columnas.
+    Valor = % de registros raw con ese label.
+    Color = intensidad del %.
+    """
+    animals = sorted(df["animal_id"].unique())
+    labels  = sorted(df["label"].dropna().unique())
+
+    matrix = np.zeros((len(animals), len(labels)))
+    for i, aid in enumerate(animals):
+        sub = df[df["animal_id"] == aid]["label"].value_counts(normalize=True)
+        for j, lbl in enumerate(labels):
+            matrix[i, j] = sub.get(lbl, 0.0)
+
+    fig, (ax_heat, ax_bar) = plt.subplots(
+        1, 2, figsize=(12, max(4, 0.55 * len(animals) + 2)),
+        gridspec_kw={"width_ratios": [2, 1]},
+    )
+    fig.suptitle(
+        "Resumen por animal: distribución de labels y cantidad de ventanas generadas",
+        fontsize=12, fontweight="bold",
+    )
+
+    # Heatmap
+    im = ax_heat.imshow(matrix, aspect="auto", cmap="YlOrRd", vmin=0, vmax=1)
+    plt.colorbar(im, ax=ax_heat, fraction=0.03, pad=0.03, label="% registros")
+    ax_heat.set_xticks(range(len(labels)))
+    ax_heat.set_xticklabels(labels, fontsize=9)
+    ax_heat.set_yticks(range(len(animals)))
+    ax_heat.set_yticklabels([str(a) for a in animals], fontsize=8)
+    ax_heat.set_title("% tiempo por label (registros raw)", fontsize=9)
+    for i in range(len(animals)):
+        for j in range(len(labels)):
+            v = matrix[i, j]
+            if v > 0.01:
+                ax_heat.text(j, i, f"{v:.0%}",
+                             ha="center", va="center",
+                             fontsize=7,
+                             color="white" if v > 0.55 else "black")
+
+    # Barras: n° ventanas por animal
+    n_wins = wins_df.groupby("animal_id").size().reindex(animals, fill_value=0)
+    bar_colors = ["#3498db"] * len(animals)
+    ax_bar.barh(range(len(animals)), n_wins.values, color=bar_colors, alpha=0.78)
+    ax_bar.set_yticks(range(len(animals)))
+    ax_bar.set_yticklabels([str(a) for a in animals], fontsize=8)
+    ax_bar.set_xlabel("N° ventanas generadas", fontsize=8)
+    ax_bar.set_title(f"Ventanas por animal\n(w={WINDOW_SIZE}, step={STEP_SIZE})", fontsize=9)
+    ax_bar.grid(axis="x", alpha=0.25)
+    for i, v in enumerate(n_wins.values):
+        ax_bar.text(v + 0.3, i, str(v), va="center", fontsize=7)
+
+    plt.tight_layout()
+    fpath = out_dir / "resumen_animales_labels.png"
+    plt.savefig(fpath, dpi=140, bbox_inches="tight")
+    plt.close()
+    print(f"  ✅ {fpath}")
+
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="Exploración del pipeline de feature engineering")
+    parser.add_argument("--csv",    default=CSV_PATH,   help="Ruta al CSV")
+    parser.add_argument("--animal", nargs="*", type=int, help="IDs de animales a graficar (default: todos)")
+    parser.add_argument("--out",    default="output_exploration", help="Carpeta de salida")
+    parser.add_argument("--max-timeline", type=int, default=6,
+                        help="Máximo de vacas con timeline individual (default: 6)")
+    args = parser.parse_args()
+
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ── Carga de datos ────────────────────────────────────────────────────────
+    print(f"\n📂 Cargando {args.csv}...")
+    df = pd.read_csv(args.csv, parse_dates=["timestamp"])
+    print(f"   {len(df):,} registros | {df['animal_id'].nunique()} animales")
+    print(f"   Labels únicos: {sorted(df['label'].dropna().unique())}")
+    print(f"   Período: {df['timestamp'].min()} → {df['timestamp'].max()}")
+
+    animals_all = sorted(df["animal_id"].unique())
+    animals     = args.animal if args.animal else animals_all
+
+    # ── Construcción de ventanas ──────────────────────────────────────────────
+    print(f"\n🔧 Construyendo ventanas (w={WINDOW_SIZE}, step={STEP_SIZE})...")
+    wins_df = build_windowed_dataset(df[df["animal_id"].isin(animals)].copy())
+    print(f"   → {len(wins_df):,} ventanas | {wins_df.shape[1]} columnas")
+
+    print(f"\n📊 Generando plots en '{out_dir}/'...\n")
+
+    # ── Plot 1: timelines individuales ────────────────────────────────────────
+    timeline_animals = animals[: args.max_timeline]
+    print(f"1️⃣  Timelines individuales ({len(timeline_animals)} vacas):")
+    plot_animal_timelines(df, timeline_animals, out_dir)
+
+    # ── Plot 2: comparativa heatmap entre vacas ───────────────────────────────
+    print("\n2️⃣  Comparativa de features entre vacas (heatmap):")
+    plot_feature_comparison(wins_df, out_dir)
+
+    # ── Plot 3: pureza de label por ventana ───────────────────────────────────
+    print("\n3️⃣  Pureza del label dominante por ventana:")
+    plot_label_purity(wins_df, out_dir)
+
+    # ── Plot 4: distribución de features por label ────────────────────────────
+    print("\n4️⃣  Distribución de features por clase (violinplots):")
+    plot_feature_by_label(wins_df, out_dir)
+
+    # ── Plot 5: evolución temporal multi-animal ───────────────────────────────
+    print("\n5️⃣  Evolución temporal de features (multi-animal):")
+    plot_temporal_feature_evolution(wins_df, out_dir)
+
+    # ── Plot 6: resumen por animal y label ────────────────────────────────────
+    print("\n6️⃣  Resumen por animal y distribución de labels:")
+    plot_animal_label_summary(df, wins_df, out_dir)
+
+    # ── Exportar tabla de ventanas ────────────────────────────────────────────
+    csv_out = out_dir / "ventanas_features.csv"
+    wins_df.to_csv(csv_out, index=False)
+    print(f"\n💾 Tabla de ventanas exportada: {csv_out}")
+    print(f"\n✅ Listo. Todos los archivos en: {out_dir}/\n")
+
 
 if __name__ == "__main__":
-    print(f"Cargando {CSV_PATH}...")
-    df = pd.read_csv(CSV_PATH, parse_dates=["timestamp"])
-    print(f"  {len(df):,} filas  ·  {df['animal_id'].nunique()} animales")
-    print(f"  Clases presentes: {sorted(df['label'].unique())}")
-
-    run_exploration(df)
+    main()
