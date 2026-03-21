@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
-import { Thermometer, Heart, Wind, Activity, BrainCircuit, Mic } from "lucide-react"
+import { Thermometer, Heart, Wind, Activity, BrainCircuit, MapPin, Compass } from "lucide-react"
 
 interface BiometricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   title: string
@@ -9,9 +9,10 @@ interface BiometricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   status: "normal" | "warning" | "high" | "low"
   icon: React.ReactNode
   labelOverride?: string
+  iconDescription?: string
 }
 
-function BiometricCard({ title, value, unit, status, icon, className, labelOverride, ...props }: BiometricCardProps) {
+function BiometricCard({ title, value, unit, status, icon, className, labelOverride, iconDescription, ...props }: BiometricCardProps) {
   const statusStyles = {
     normal: {
       text: "text-primary",
@@ -51,7 +52,7 @@ function BiometricCard({ title, value, unit, status, icon, className, labelOverr
   return (
     <div
       className={cn(
-        "relative p-6 rounded-xl border flex flex-col justify-between overflow-hidden shadow-sm transition-all",
+        "relative p-6 rounded-xl border flex flex-col justify-between shadow-sm transition-all",
         current.bg,
         current.border,
         className
@@ -64,10 +65,20 @@ function BiometricCard({ title, value, unit, status, icon, className, labelOverr
         <h4 className="text-label-md text-on-surface-variant font-mono uppercase tracking-widest mt-1">
           {title}
         </h4>
-        <div className={cn("p-2 rounded-md bg-surface-container-highest", current.text)}>
-          <div className="w-5 h-5 flex items-center justify-center">
-            {icon}
+        <div className="relative group flex items-center justify-center">
+          <div 
+            className={cn("p-2 rounded-md bg-surface-container-highest cursor-help transition-colors duration-200 group-hover:text-white", current.text)}
+          >
+            <div className="w-5 h-5 flex items-center justify-center">
+              {icon}
+            </div>
           </div>
+          
+          {iconDescription && (
+            <span className="pointer-events-none absolute right-0 top-full z-[80] mt-2 w-64 rounded-xl bg-slate-900 px-4 py-3 text-[12px] font-normal leading-relaxed text-white opacity-0 shadow-lg shadow-black/40 transition-opacity duration-200 group-hover:opacity-100 whitespace-pre-line text-left">
+              {iconDescription}
+            </span>
+          )}
         </div>
       </div>
 
@@ -84,10 +95,12 @@ function BiometricCard({ title, value, unit, status, icon, className, labelOverr
       </div>
 
       {/* Subtle glow effect */}
-      <div className={cn(
-        "absolute -bottom-6 -right-6 w-32 h-32 blur-[32px] rounded-full pointer-events-none",
-        status === 'normal' ? "bg-primary/10" : "bg-secondary/15"
-      )} />
+      <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none z-0">
+        <div className={cn(
+          "absolute -bottom-6 -right-6 w-32 h-32 blur-[32px] rounded-full",
+          status === 'normal' ? "bg-primary/10" : "bg-secondary/15"
+        )} />
+      </div>
     </div>
   )
 }
@@ -96,9 +109,9 @@ interface Biometrics {
   temperature: { value: number | string; status: "normal" | "warning" | "high" | "low" }
   heartRate: { value: number | string; status: "normal" | "warning" | "high" | "low" }
   distance: { value: number | string; status: "normal" | "warning" | "high" | "low" }
-  stress: { value: string; status: "normal" | "warning" | "high" | "low" }
-  rumination: { value: string; status: "normal" | "warning" | "high" | "low" }
-  vocalization: { value: string; status: "normal" | "warning" | "high" | "low" }
+  rmssd: { value: number | string; status: "normal" | "warning" | "high" | "low" }
+  sdnn: { value: number | string; status: "normal" | "warning" | "high" | "low" }
+  location: { value: string; status: "normal" | "warning" | "high" | "low" }
 }
 
 interface BiometricCardsProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -114,6 +127,7 @@ export function BiometricCards({ biometrics, className, ...props }: BiometricCar
         unit="°C"
         status={biometrics.temperature.status}
         icon={<Thermometer />}
+        iconDescription="Medición de temperatura corporal del animal. Rango normal (Sana): ~38.5 °C"
       />
       <BiometricCard
         title="Frec. Cardíaca"
@@ -121,6 +135,7 @@ export function BiometricCards({ biometrics, className, ...props }: BiometricCar
         unit="BPM"
         status={biometrics.heartRate.status}
         icon={<Heart />}
+        iconDescription="Latidos por minuto detectados. Rango normal (Sana): 62 - 66 BPM"
       />
       <BiometricCard
         title="Distancia"
@@ -129,27 +144,33 @@ export function BiometricCards({ biometrics, className, ...props }: BiometricCar
         status={biometrics.distance.status}
         icon={<Wind />}
         labelOverride="Actividad Física"
+        iconDescription="Distancia total recorrida. Promedio normal (Sana): ~100 MTS"
       />
       <BiometricCard
-        title="Estrés Fisiológico"
-        value={biometrics.stress.value}
-        status={biometrics.stress.status}
-        icon={<BrainCircuit />}
-        labelOverride="Análisis HRV"
-      />
-      <BiometricCard
-        title="Rumia"
-        value={biometrics.rumination.value}
-        status={biometrics.rumination.status}
+        title="RMSSD"
+        value={biometrics.rmssd.value}
+        unit="ms"
+        status={biometrics.rmssd.status}
         icon={<Activity />}
-        labelOverride="Actividad Digestiva"
+        labelOverride="Var. Frec. Card."
+        iconDescription="Root Mean Square of Successive Differences (Indicador de estrés agudo). Rango normal (Sana): 41 - 43 ms"
       />
       <BiometricCard
-        title="Vocalización"
-        value={biometrics.vocalization.value}
-        status={biometrics.vocalization.status}
-        icon={<Mic />}
-        labelOverride="Sonido emitido"
+        title="SDNN"
+        value={biometrics.sdnn.value}
+        unit="ms"
+        status={biometrics.sdnn.status}
+        icon={<Activity />}
+        labelOverride="Var. Total"
+        iconDescription="Standard Deviation of NN intervals (Indicador de estrés crónico). Rango normal (Sana): > 50 ms"
+      />
+      <BiometricCard
+        title="Ubicación GPS"
+        value={biometrics.location.value}
+        status={biometrics.location.status}
+        icon={<MapPin />}
+        labelOverride="Coordenadas"
+        iconDescription="Última posición GPS registrada (Latitud, Longitud)"
       />
     </div>
   )

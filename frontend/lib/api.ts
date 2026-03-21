@@ -380,11 +380,25 @@ export async function fetchAnimalDetail(idString: string) {
       }
     : null;
 
+  const regDateStr = cowRes.registration_date || new Date().toISOString();
+  let currentAgeMonths = Number(cowRes.age_months) || 0;
+  
+  if (cowRes.registration_date) {
+    const regDate = new Date(cowRes.registration_date);
+    const now = new Date();
+    const monthsPassed = (now.getFullYear() - regDate.getFullYear()) * 12 + (now.getMonth() - regDate.getMonth());
+    if (monthsPassed > 0) {
+      currentAgeMonths += monthsPassed;
+    }
+  }
+
+  const rawBreed = cowRes.breed?.trim();
+
   const animalInfo = {
     id: idString,
-    breed: cowRes.breed || "Mestiza",
-    ageMonths: cowRes.age_months || 0,
-    registrationDate: cowRes.registration_date || new Date().toISOString(),
+    breed: rawBreed && rawBreed.toLowerCase() !== "string" ? rawBreed : "Mestiza",
+    ageMonths: currentAgeMonths,
+    registrationDate: regDateStr,
     status: frontendStatus,
     temperature: latestReading?.temperatura_corporal_prom || 38.5,
     heartRate: latestReading?.frec_cardiaca_prom
@@ -397,6 +411,8 @@ export async function fetchAnimalDetail(idString: string) {
     rmssd: latestReading?.rmssd || 0,
     sdnn: latestReading?.sdnn || 0,
     vocalization: latestReading?.hubo_vocalizacion ?? false,
+    latitude: latestReading?.latitud || null,
+    longitude: latestReading?.longitud || null,
     lastUpdated: latestReading?.timestamp
       ? new Date(latestReading.timestamp).toLocaleString([], {
           year: "numeric",

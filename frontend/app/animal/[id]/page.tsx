@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { IterationCcwIcon, Activity, ArrowLeft } from "lucide-react"
+import { IterationCcwIcon, Activity, ArrowLeft, Calendar, Tag, Clock } from "lucide-react"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { BiometricCards } from "@/components/animal/BiometricCards"
 import { BiometricChart } from "@/components/animal/BiometricChart"
@@ -13,12 +13,7 @@ import { Button } from "@/components/ui/Button"
 import { CowStatus } from "@/types"
 import CowHealthViewer, { SingleCowViewer, mapBackendStatusTo3D } from "@/lib/CowHealthViewer"
 
-function getStressLevel(rmssd: number, sdnn: number) {
-  if (rmssd === 0 && sdnn === 0) return { value: "N/A", status: "normal" as const }
-  if (rmssd < 20 || sdnn < 30) return { value: "Alto", status: "high" as const }
-  if (rmssd < 40 || sdnn < 50) return { value: "Moderado", status: "warning" as const }
-  return { value: "Bajo", status: "normal" as const }
-}
+
 
 function formatTimeInSystem(dateStr: string) {
   if (!dateStr) return "N/A";
@@ -74,7 +69,7 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus, prediction } = data
+  const { animal, chartData, healthStatus, healthHistory, prediction } = data
 
   const biometrics = {
     temperature: {
@@ -89,14 +84,17 @@ export default function AnimalDetail() {
       value: animal.distance,
       status: "normal" as const
     },
-    stress: getStressLevel(animal.rmssd || 0, animal.sdnn || 0),
-    rumination: {
-      value: animal.rumination ? "Con rumia" : "Sin rumia",
-      status: animal.rumination ? "normal" as const : "high" as const
+    rmssd: {
+      value: animal.rmssd ?? 0,
+      status: "normal" as const
     },
-    vocalization: {
-      value: animal.vocalization ? "Detectada" : "No detectada",
-      status: animal.vocalization ? "high" as const : "normal" as const
+    sdnn: {
+      value: animal.sdnn ?? 0,
+      status: "normal" as const
+    },
+    location: {
+      value: `${animal.latitude ?? "N/A"}, ${animal.longitude ?? "N/A"}`,
+      status: "normal" as const
     }
   }
 
@@ -111,9 +109,41 @@ export default function AnimalDetail() {
 
   let effectiveLabel = primaryLabel
   let effectiveConf = primaryConf
+  let altLabel = secondaryLabel
+  let altConf = secondaryConf
   if (secondaryLabel && secondaryConf !== null && secondaryConf > effectiveConf) {
     effectiveLabel = secondaryLabel
     effectiveConf = secondaryConf
+    altLabel = primaryLabel
+    altConf = primaryConf
+  }
+
+  const isSick = animal.status?.toLowerCase() !== "sana" && animal.status?.toLowerCase() !== "sin datos";
+
+  let trendMsg = null;
+  if (isSick && effectiveConf < 0.8 && healthHistory && healthHistory.length > 0) {
+    const sortedHistory = [...healthHistory].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    // skip the first if it matches current timestamp, just look at past 
+    const pastRecords = sortedHistory.slice(1);
+    const recentRecords = pastRecords.slice(0, 5); // look at the last 5 previous readings
+    
+    const hadStateRecently = recentRecords.some(r => r.status.toLowerCase() === effectiveLabel.toLowerCase());
+    
+    const prevRecord = pastRecords.length > 0 ? pastRecords[0] : null;
+    let prevConf = 0;
+    if (prevRecord && prevRecord.status.toLowerCase() === effectiveLabel.toLowerCase()) {
+      prevConf = prevRecord.confidence || 0;
+    }
+
+    if (hadStateRecently) {
+      if (effectiveConf > prevConf) {
+        trendMsg = `Hay registros previos de ${effectiveLabel}, posiblemente agravándose o recayendo.`;
+      } else {
+        trendMsg = `Posiblemente abandonando o recuperándose del cuadro de ${effectiveLabel}.`;
+      }
+    } else {
+      trendMsg = `No hay registros recientes, posiblemente entrando en nuevo cuadro de ${effectiveLabel}.`;
+    }
   }
 
   return (
@@ -135,15 +165,107 @@ export default function AnimalDetail() {
           Volver al Dashboard
         </Button>
 
-        <div className="flex items-center justify-between bg-surface-container-low p-4 rounded-lg border border-outline-variant/50">
-          <div className="flex items-center gap-3">
-            <span className="text-body-md font-medium text-on-surface-variant">Estado actual:</span>
-            <StatusBadge status={animal.status} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-2">
+          <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant/50 flex items-center gap-4">
+            <div className="p-2 rounded-md bg-primary-container/20 text-primary">
+              <Tag className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">Raza</p>
+              <p className="text-body-md font-medium text-on-surface">{animal.breed}</p>
+            </div>
           </div>
-          <Button variant="primary" className="gap-2 w-fit">
-            <IterationCcwIcon className="w-4 h-4" />
-            Realizar Analisis
-          </Button>
+          <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant/50 flex items-center gap-4">
+            <div className="p-2 rounded-md bg-primary-container/20 text-primary">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">Ingresada</p>
+              <p className="text-body-md font-medium text-on-surface">
+                {new Date(animal.registrationDate).toLocaleDateString()}
+              </p>
+            </div>
+          </div>
+          <div className="bg-surface-container-low p-4 rounded-lg border border-outline-variant/50 flex items-center gap-4">
+            <div className="p-2 rounded-md bg-primary-container/20 text-primary">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">Edad</p>
+              <p className="text-body-md font-medium text-on-surface">{animal.ageMonths} meses</p>
+            </div>
+          </div>
+        </div>
+
+        <div className={`flex flex-col md:flex-row md:items-center justify-between p-5 rounded-xl border transition-colors gap-4 ${
+          isSick 
+            ? "bg-tertiary/10 border-tertiary/40 shadow-lg shadow-tertiary/10" 
+            : "bg-surface-container-low border-outline-variant/50"
+        }`}>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-4">
+              <span className={`font-bold ${
+                isSick ? "text-xl text-tertiary" : "text-body-md text-on-surface-variant"
+              }`}>
+                Estado actual:
+              </span>
+              <StatusBadge 
+                status={animal.status} 
+                className={isSick ? "px-4 py-2 text-base scale-110 origin-left border-tertiary/60" : ""} 
+                pulse={isSick}
+              />
+            </div>
+
+            {isSick && (
+              <div className="flex flex-col gap-1.5 mt-1 border-l-2 border-tertiary/50 pl-3">
+                <p className="text-body-md text-on-surface flex items-center gap-2">
+                  <span className="font-semibold">Certeza del modelo:</span> {(effectiveConf * 100).toFixed(1)}%
+                  {effectiveConf >= 0.8 ? (
+                    <span className="text-tertiary text-[10px] font-bold uppercase tracking-wider bg-tertiary/20 px-2 py-0.5 rounded-sm">
+                      Seguro - Requiere Acción
+                    </span>
+                  ) : null}
+                </p>
+                
+                {altLabel && altConf !== null && altLabel.toLowerCase() !== "sana" && (
+                  <p className="text-label-sm text-on-surface-variant flex items-center gap-1.5 mt-0.5">
+                    <span className="font-semibold">Evaluación alternativa:</span> 
+                    El modelo considera posible {altLabel} ({(altConf * 100).toFixed(1)}%)
+                  </p>
+                )}
+
+                {trendMsg && (
+                  <p className="text-label-md text-on-surface-variant flex items-center gap-1.5 mt-1">
+                    <Activity className="w-4 h-4 text-tertiary" />
+                    <span className="font-medium text-tertiary">Análisis de evolución:</span> {trendMsg}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="flex flex-col items-end gap-3 min-w-fit">
+            <p className="text-label-sm text-on-surface-variant max-w-[150px] text-right">
+              Aviso: Datos basados en los últimos 5 minutos.
+            </p>
+            <div className="flex items-center gap-3">
+              <Button variant="primary" className="gap-2 w-fit">
+                <IterationCcwIcon className="w-4 h-4" />
+                Actualizar
+              </Button>
+              {isSick && (
+                <Button 
+                  variant="secondary" 
+                  className="gap-2 w-fit bg-surface border-tertiary/30 hover:bg-tertiary/10 text-tertiary" 
+                  onClick={() => {
+                    document.getElementById('diagnosis-panel')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                >
+                  Ver más detalles
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
         <section>
           <BiometricCards biometrics={biometrics} />
@@ -158,7 +280,7 @@ export default function AnimalDetail() {
             normalRange={[38.0, 39.2]}
           />
         </section>
-        <section className="mt-4">
+        <section id="diagnosis-panel" className="mt-4 scroll-mt-6">
           <DiagnosisPanel
             status={effectiveLabel as CowStatus}
             confidence={effectiveConf}
