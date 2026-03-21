@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import HTTPException, status
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -32,13 +33,24 @@ class HealthService:
             .limit(window)
         )
         readings = list(self.db.scalars(readings_stmt).all())
-        if not readings:
+        if len(readings) < window:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Not enough readings to analyze",
+                detail=f"Not enough readings to analyze. Required={window}, found={len(readings)}",
             )
 
-        status_value = await self.ai_client.predict([self._serialize_reading(r) for r in readings])
+        # ML features rely on temporal order, so send from oldest to newest.
+        readings_for_model = [self._serialize_reading(r) for r in reversed(readings)]
+
+        try:
+            status_value = await self.ai_client.predict(cow_id=cow_id, readings=readings_for_model)
+        except httpx.HTTPError as exc:
+            logger.exception("AI service request failed for cow_id=%s", cow_id)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI service unavailable or returned an invalid response",
+            ) from exc
+
         analysis = HealthAnalysis(cow_id=cow_id, status=status_value)
         self.db.add(analysis)
         self.db.commit()

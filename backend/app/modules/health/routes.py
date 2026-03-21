@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.integrations.ai_client import AIClient
 from app.modules.health.controller import HealthController
@@ -11,15 +12,23 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 
 @router.post("/analyze/{cow_id}", response_model=HealthAnalysisResponse)
-async def analyze_cow_health(cow_id: int, db: Session = Depends(get_db)) -> HealthAnalysisResponse:
+async def analyze_cow_health(
+    cow_id: int,
+    limit: int = Query(default=settings.health_window_size, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> HealthAnalysisResponse:
     controller = HealthController(HealthService(db=db, ai_client=AIClient()))
-    return await controller.analyze(cow_id)
+    return await controller.analyze(cow_id, limit=limit)
 
 
 @router.get("/status/{cow_id}", response_model=HealthAnalysisResponse)
-async def get_latest_health_status(cow_id: int, db: Session = Depends(get_db)) -> HealthAnalysisResponse:
+async def get_latest_health_status(
+    cow_id: int,
+    limit: int = Query(default=settings.health_window_size, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> HealthAnalysisResponse:
     controller = HealthController(HealthService(db=db, ai_client=AIClient()))
-    return await controller.status(cow_id)
+    return await controller.status(cow_id, limit=limit)
 
 
 @router.get("/history/{cow_id}", response_model=list[HealthAnalysisResponse])

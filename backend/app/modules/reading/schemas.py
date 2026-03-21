@@ -5,10 +5,8 @@ from pydantic import BaseModel
 from app.shared.utils import build_pagination
 
 
-class ReadingCreate(BaseModel):
+class ReadingPayload(BaseModel):
     timestamp: datetime
-    cow_id: int
-    collar_id: int
     temperatura_corporal_prom: float
     hubo_rumia: bool
     frec_cardiaca_prom: float
@@ -21,8 +19,14 @@ class ReadingCreate(BaseModel):
     velocidad_movimiento_prom: float
 
 
-class ReadingResponse(ReadingCreate):
+class ReadingCreate(ReadingPayload):
+    collar_id: int
+
+
+class ReadingResponse(ReadingPayload):
     id: int
+    cow_id: int
+    collar_id: int
 
     model_config = {"from_attributes": True}
 
