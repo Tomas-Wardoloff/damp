@@ -94,7 +94,50 @@ def _extract_window_features(
     return feats
 
 
+def _build_rnn_sequence(readings: list[ReadingInput], model: Any) -> np.ndarray:
+    df = _to_dataframe(readings)
+
+    window_size = int(getattr(model, "_damp_window_size", 300) or 300)
+    if len(df) < window_size:
+        raise ValueError(
+            f"Se necesitan al menos {window_size} lecturas para este modelo. Recibidas: {len(df)}"
+        )
+
+    numeric_features = list(
+        getattr(model, "_damp_numeric_features", None)
+        or [
+            "temperatura_corporal_prom",
+            "frec_cardiaca_prom",
+            "rmssd",
+            "sdnn",
+            "metros_recorridos",
+            "velocidad_movimiento_prom",
+        ]
+    )
+    bool_features = list(
+        getattr(model, "_damp_bool_features", None)
+        or ["hubo_rumia", "hubo_vocalizacion"]
+    )
+    feature_cols = numeric_features + bool_features
+
+    window = df.tail(window_size).reset_index(drop=True).copy()
+    for col in bool_features:
+        window[col] = window[col].astype(float)
+
+    x = window[feature_cols].astype(float).to_numpy(dtype=float)
+
+    scaler = getattr(model, "_damp_scaler", None)
+    if scaler is not None:
+        x = scaler.transform(x)
+
+    x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+    return x.reshape(1, window_size, len(feature_cols)).astype(np.float32)
+
+
 def build_features(readings: list[ReadingInput], model: Any) -> np.ndarray:
+    if getattr(model, "_damp_model_type", None):
+        return _build_rnn_sequence(readings, model)
+
     window = _to_dataframe(readings)
 
     numeric_features = list(
