@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 class MastitisPredictor:
-    def __init__(self, model_path: str = "models/nuevas-clases/mastitis_model_v4.pkl"):
+    def __init__(self, model_path: str = "models/nuevas-clases/mastitis_model_v6.pkl"):
         if not Path(model_path).exists():
             raise FileNotFoundError(
                 f"Modelo no encontrado: {model_path}\n"
