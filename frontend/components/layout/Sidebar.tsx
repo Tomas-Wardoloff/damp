@@ -8,11 +8,9 @@ import {
   LayoutDashboard,
   Map as MapIcon,
   Settings,
-  LifeBuoy,
   ChevronLeft,
   ChevronRight,
-  Activity,
-  User
+  Activity
 } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 
@@ -84,37 +82,6 @@ export function Sidebar() {
           )
         })}
       </nav>
-
-      {/* Footer Actions */}
-      <div className="p-3 border-t border-outline-variant/30 flex flex-col gap-2">
-        <Button
-          variant="ghost"
-          size="none"
-          title={isCollapsed ? "Soporte" : undefined}
-          className="px-3 py-3 gap-3 group w-full justify-start mt-auto"
-        >
-          <LifeBuoy className="w-5 h-5 shrink-0" />
-          {!isCollapsed && (
-            <span className="text-body-md whitespace-nowrap font-medium">Soporte</span>
-          )}
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="none"
-          title={isCollapsed ? "Perfil de Usuario" : undefined}
-          className="gap-3 px-2 py-2 mt-2 w-full justify-start"
-        >
-          <div className="w-8 h-8 rounded-full bg-secondary outline-1 outline-offset-2 outline-secondary/30 shrink-0 overflow-hidden relative flex items-center justify-center">
-            <User className="w-5 h-5 text-on-surface" />
-          </div>
-          {!isCollapsed && (
-            <div className="flex flex-col whitespace-nowrap overflow-hidden">
-              <span className="text-body-md font-medium text-on-surface leading-tight">user@email.com</span>
-            </div>
-          )}
-        </Button>
-      </div>
     </aside>
   )
 }

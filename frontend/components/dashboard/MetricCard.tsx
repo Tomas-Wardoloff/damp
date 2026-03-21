@@ -20,11 +20,11 @@ export function MetricCard({ title, value, subtitle, status = "neutral", classNa
       glow: null
     },
     sana: {
-      text: "text-[#2ecc71]",
-      bg: "bg-[#2ecc71]/10",
-      border: "border-[#2ecc71]/30",
-      accent: "bg-[#2ecc71]",
-      glow: "bg-[#2ecc71]/10"
+      text: "text-[#16a34a]",
+      bg: "bg-[#16a34a]/12",
+      border: "border-[#16a34a]/35",
+      accent: "bg-[#16a34a]",
+      glow: "bg-[#16a34a]/18"
     },
     subclinica: {
       text: "text-secondary",
@@ -41,32 +41,32 @@ export function MetricCard({ title, value, subtitle, status = "neutral", classNa
       glow: "bg-tertiary/20"
     },
     mastitis: {
-      text: "text-[#e74c3c]",
-      bg: "bg-[#e74c3c]/10",
-      border: "border-[#e74c3c]/30",
-      accent: "bg-[#e74c3c]",
-      glow: "bg-[#e74c3c]/20"
+      text: "text-[#dc2626]",
+      bg: "bg-[#dc2626]/12",
+      border: "border-[#dc2626]/35",
+      accent: "bg-[#dc2626]",
+      glow: "bg-[#dc2626]/22"
     },
     febril: {
-      text: "text-[#e67e22]",
-      bg: "bg-[#e67e22]/10",
-      border: "border-[#e67e22]/30",
-      accent: "bg-[#e67e22]",
-      glow: "bg-[#e67e22]/15"
+      text: "text-[#eab308]",
+      bg: "bg-[#eab308]/12",
+      border: "border-[#eab308]/35",
+      accent: "bg-[#eab308]",
+      glow: "bg-[#eab308]/18"
     },
     digestivo: {
-      text: "text-[#1abc9c]",
-      bg: "bg-[#1abc9c]/10",
-      border: "border-[#1abc9c]/30",
-      accent: "bg-[#1abc9c]",
-      glow: "bg-[#1abc9c]/15"
+      text: "text-[#f97316]",
+      bg: "bg-[#f97316]/12",
+      border: "border-[#f97316]/35",
+      accent: "bg-[#f97316]",
+      glow: "bg-[#f97316]/18"
     },
     celo: {
-      text: "text-[#9b59b6]",
-      bg: "bg-[#9b59b6]/10",
-      border: "border-[#9b59b6]/30",
-      accent: "bg-[#9b59b6]",
-      glow: "bg-[#9b59b6]/15"
+      text: "text-[#ec4899]",
+      bg: "bg-[#ec4899]/12",
+      border: "border-[#ec4899]/35",
+      accent: "bg-[#ec4899]",
+      glow: "bg-[#ec4899]/18"
     },
     sin_datos: {
       text: "text-on-surface-variant",
