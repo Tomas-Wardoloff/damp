@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -33,30 +34,53 @@ class CowService:
         if not cows:
             return {"summary": {}, "cows": []}
 
+        now_utc = datetime.utcnow()
+
         # Latest reading per cow (1 SQL query)
-        subq_r = (
-            select(Reading.cow_id, func.max(Reading.timestamp).label("max_ts"))
-            .group_by(Reading.cow_id)
+        ranked_readings = (
+            select(
+                Reading.id.label("reading_id"),
+                Reading.cow_id.label("cow_id"),
+                func.row_number()
+                .over(
+                    partition_by=Reading.cow_id,
+                    order_by=(Reading.timestamp.desc(), Reading.id.desc()),
+                )
+                .label("row_num"),
+            )
+            .where(Reading.timestamp <= now_utc)
             .subquery()
         )
         stmt_r = select(Reading).join(
-            subq_r,
-            (Reading.cow_id == subq_r.c.cow_id) & (Reading.timestamp == subq_r.c.max_ts),
+            ranked_readings,
+            Reading.id == ranked_readings.c.reading_id,
+        ).where(
+            ranked_readings.c.row_num == 1,
         )
         latest_readings: dict[int, Reading] = {
             r.cow_id: r for r in self.db.scalars(stmt_r).all()
         }
 
         # Latest health analysis per cow (1 SQL query)
-        subq_h = (
-            select(HealthAnalysis.cow_id, func.max(HealthAnalysis.created_at).label("max_ts"))
-            .group_by(HealthAnalysis.cow_id)
+        ranked_health = (
+            select(
+                HealthAnalysis.id.label("health_id"),
+                HealthAnalysis.cow_id.label("cow_id"),
+                func.row_number()
+                .over(
+                    partition_by=HealthAnalysis.cow_id,
+                    order_by=(HealthAnalysis.created_at.desc(), HealthAnalysis.id.desc()),
+                )
+                .label("row_num"),
+            )
+            .where(HealthAnalysis.created_at <= now_utc)
             .subquery()
         )
         stmt_h = select(HealthAnalysis).join(
-            subq_h,
-            (HealthAnalysis.cow_id == subq_h.c.cow_id)
-            & (HealthAnalysis.created_at == subq_h.c.max_ts),
+            ranked_health,
+            HealthAnalysis.id == ranked_health.c.health_id,
+        ).where(
+            ranked_health.c.row_num == 1,
         )
         latest_health: dict[int, HealthAnalysis] = {
             h.cow_id: h for h in self.db.scalars(stmt_h).all()

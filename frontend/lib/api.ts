@@ -328,6 +328,7 @@ export async function fetchDashboardData(): Promise<{
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const animals = (data.cows || []).map((cow: any) => ({
       ...cow,
+      rawLastUpdated: cow.lastUpdated,
       lastUpdated: formatApiDateTime(cow.lastUpdated),
     }));
     return { animals };

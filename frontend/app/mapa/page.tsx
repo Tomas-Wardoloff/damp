@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { Activity, Clock3, MapPin } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { fetchDashboardData, parseApiDateMs } from "@/lib/api";
+import { fetchDashboardData } from "@/lib/api";
 import type { HerdMapPoint } from "@/components/dashboard/HerdGeoMapClient";
 
 const HerdGeoMapClient = dynamic(
@@ -96,15 +96,18 @@ export default function MapaRodeoPage() {
         .map((a: any) => {
           const status = a.status?.toUpperCase() || "SANA";
           const normalizedStatus = normalizeDisplayedStatus(status);
+          const latestTimestamp = typeof a.rawLastUpdated === "string"
+            ? a.rawLastUpdated
+            : a.lastUpdated;
 
           return {
             cowId: Number(a.id),
             lat: Number(a.latitud),
             lng: Number(a.longitud),
-            timestamp: a.lastUpdated,
+            timestamp: latestTimestamp,
             healthStatus: normalizedStatus,
             confidence: null, // Summary currently doesn't provide confidence
-            healthCreatedAt: a.lastUpdated,
+            healthCreatedAt: latestTimestamp,
             primaryStatus: status,
             primaryConfidence: null,
             secondaryStatus: null,
