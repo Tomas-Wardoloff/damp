@@ -15,6 +15,12 @@ def create_reading(payload: ReadingCreate, db: Session = Depends(get_db)) -> Rea
     return controller.create(payload)
 
 
+@router.get("/readings/latests", response_model=list[ReadingResponse])
+def list_latest_readings(db: Session = Depends(get_db)) -> list[ReadingResponse]:
+    controller = ReadingController(ReadingService(db))
+    return controller.list_latests()
+
+
 @router.get("/cows/{cow_id}/readings", response_model=ReadingListResponse)
 def list_cow_readings(
     cow_id: int,
@@ -26,3 +32,4 @@ def list_cow_readings(
     items, total = controller.list_by_cow(cow_id=cow_id, page=page, size=size)
     response_items = [ReadingResponse.model_validate(item) for item in items]
     return ReadingListResponse.from_items(response_items, page=page, size=size, total=total)
+

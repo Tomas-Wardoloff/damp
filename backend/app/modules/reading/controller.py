@@ -19,3 +19,6 @@ class ReadingController:
 
     def list_by_cow(self, cow_id: int, page: int, size: int):
         return self.service.list_by_cow(cow_id=cow_id, page=page, size=size)
+
+    def list_latests(self):
+        return self.service.list_latests()

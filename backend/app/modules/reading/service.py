@@ -45,3 +45,22 @@ class ReadingService:
             .limit(limit)
         )
         return list(self.db.scalars(stmt).all())
+
+    def list_latests(self) -> list[Reading]:
+        latest_ranked = select(
+            Reading.id.label("reading_id"),
+            func.row_number()
+            .over(
+                partition_by=Reading.cow_id,
+                order_by=(Reading.timestamp.desc(), Reading.id.desc()),
+            )
+            .label("row_num"),
+        ).subquery()
+
+        stmt = (
+            select(Reading)
+            .join(latest_ranked, Reading.id == latest_ranked.c.reading_id)
+            .where(latest_ranked.c.row_num == 1)
+            .order_by(Reading.cow_id.asc())
+        )
+        return list(self.db.scalars(stmt).all())
