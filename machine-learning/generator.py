@@ -267,6 +267,15 @@ path_sample = out / "damp_sample_temporal.csv"
 df.to_csv(path_full, index=False)
 df.sample(200, random_state=42).sort_values("timestamp").to_csv(path_sample, index=False)
 
+# BOV_018 es clínica — tiene la progresión más completa
+# sana → subclinica → clinica en 48hs, ideal para testear el modelo
+path_test = out / "damp_data_test.csv"
+vaca_test = df[df.animal_id == "BOV_018"].copy()
+vaca_test.to_csv(path_test, index=False)
+
 print(f"\n✓ Dataset completo  → {path_full}")
 print(f"✓ Muestra 200 filas → {path_sample}")
+print(f"✓ Test una vaca     → {path_test}")
+print(f"  (BOV_018, clínica, {len(vaca_test)} registros)")
+print(f"  labels: {vaca_test['label'].value_counts().to_dict()}")
 print(f"\nColumnas: {list(df.columns)}")
