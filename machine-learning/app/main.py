@@ -44,7 +44,7 @@ def health() -> dict:
 def predict(payload: PredictRequest) -> PredictResponse:
     try:
         model = load_model()
-        features = build_features(payload.readings)
+        features = build_features(payload.readings, model)
         status, confidence = predict_status(model, features)
 
         return PredictResponse(
