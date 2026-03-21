@@ -480,6 +480,7 @@ def main():
     torch.save(model.state_dict(), rnn_path)
     with open(meta_path, "wb") as f:
         pickle.dump({
+            "model_state":      model.state_dict(),   # pesos dentro del pkl
             "scaler":           scaler,
             "label_encoder":    le,
             "window_size":      WINDOW_SIZE,
