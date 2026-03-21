@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
-  TriangleAlert,
   Map as MapIcon,
   Settings,
   LifeBuoy,
@@ -23,7 +22,6 @@ export function Sidebar() {
 
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Alertas", href: "/alertas", icon: TriangleAlert },
     { name: "Mapa de Rodeo", href: "/mapa", icon: MapIcon },
     { name: "Configuración", href: "/configuracion", icon: Settings },
   ]
