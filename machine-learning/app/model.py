@@ -15,9 +15,7 @@ def _resolve_model_path() -> Path:
 
     base_dir = Path(__file__).resolve().parents[1]
     candidates = [
-        base_dir / "model.pkl",
-        base_dir / "models" / "model.pkl",
-        base_dir / "models" / "mastitis_model.pkl",
+        base_dir / "models/nuevas-clases/mastitis_model_v7.pkl"
     ]
 
     for candidate in candidates:

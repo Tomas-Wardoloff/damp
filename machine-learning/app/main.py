@@ -6,13 +6,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.model import load_model
-from app.predictor import build_features, predict_status
-from app.schemas import PredictRequest, PredictResponse
+from app.predictor import build_features, predict_top2
+from app.schemas import ClassProbability, PredictRequest, PredictResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DAMP AI Service", version="1.0.0")
+app = FastAPI(title="DAMP AI Service", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,7 +32,7 @@ def startup_event() -> None:
 
 @app.get("/")
 def root() -> dict:
-    return {"service": "damp-ai", "status": "ok"}
+    return {"service": "damp-ai", "version": "2.0.0", "status": "ok"}
 
 
 @app.get("/health")
@@ -44,14 +44,27 @@ def health() -> dict:
 def predict(payload: PredictRequest) -> PredictResponse:
     try:
         model = load_model()
+
         features = build_features(payload.readings, model)
-        status, confidence = predict_status(model, features)
+
+        primary_label, primary_conf, secondary_label, secondary_conf = predict_top2(
+            model, features
+        )
 
         return PredictResponse(
-            cow_id=payload.cow_id,
-            status=status,
-            confidence=confidence,
+            cow_id=str(payload.cow_id),
+            primary=ClassProbability(
+                label=primary_label,
+                confidence=round(primary_conf, 4),
+            ),
+            secondary=ClassProbability(
+                label=secondary_label,
+                confidence=round(secondary_conf, 4),
+            ),
+            alert=primary_label != "sana",
+            n_readings_used=len(payload.readings),
         )
+
     except ValueError as exc:
         logger.exception("Validation or prediction error")
         raise HTTPException(status_code=400, detail=str(exc)) from exc
