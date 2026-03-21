@@ -135,7 +135,7 @@ def predict_animal(records, model_path: str = "models/mastitis_model.pkl") -> di
 # ── Demo ──────────────────────────────────────────────────────────────────────
  
 def _run_demo():
-    csv_path = Path("data/cow_014_subclinica_progresando.csv") # Asegurate de que esta ruta sea correcta
+    csv_path = Path("data-pruebas/data/cow_014_subclinica_progresando.csv") # Asegurate de que esta ruta sea correcta
     if not csv_path.exists():
         print(f"❌ {csv_path} no encontrado.")
         return
