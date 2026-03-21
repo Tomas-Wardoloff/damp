@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from fastapi import HTTPException, status
 import httpx
@@ -113,6 +114,54 @@ class HealthService:
             .order_by(HealthAnalysis.created_at.desc())
         )
         return list(self.db.scalars(stmt).all())
+
+    def clinical_history(self, days: int) -> tuple[datetime, datetime, list[dict]]:
+        to_date = datetime.utcnow()
+        from_date = to_date - timedelta(days=days)
+
+        stmt = (
+            select(HealthAnalysis)
+            .where(HealthAnalysis.created_at >= from_date)
+            .order_by(HealthAnalysis.cow_id.asc(), HealthAnalysis.created_at.asc())
+        )
+        analyses = list(self.db.scalars(stmt).all())
+
+        grouped: dict[int, list[HealthAnalysis]] = {}
+        for analysis in analyses:
+            grouped.setdefault(int(analysis.cow_id), []).append(analysis)
+
+        cows: list[dict] = []
+        for cow_id in sorted(grouped.keys()):
+            points = grouped[cow_id]
+            transitions = 0
+            for i in range(1, len(points)):
+                if points[i].status != points[i - 1].status:
+                    transitions += 1
+
+            latest = points[-1]
+            cows.append(
+                {
+                    "cow_id": cow_id,
+                    "total_points": len(points),
+                    "transitions": transitions,
+                    "stable": transitions == 0,
+                    "latest_status": latest.status,
+                    "points": [
+                        {
+                            "created_at": p.created_at,
+                            "status": p.status,
+                            "confidence": p.confidence,
+                            "primary_status": p.primary_status,
+                            "primary_confidence": p.primary_confidence,
+                            "secondary_status": p.secondary_status,
+                            "secondary_confidence": p.secondary_confidence,
+                        }
+                        for p in points
+                    ],
+                }
+            )
+
+        return from_date, to_date, cows
 
     @staticmethod
     def _serialize_reading(reading: Reading) -> dict:

@@ -13,3 +13,6 @@ class HealthController:
 
     def history(self, cow_id: int):
         return self.service.history(cow_id)
+
+    def clinical_history(self, days: int):
+        return self.service.clinical_history(days)

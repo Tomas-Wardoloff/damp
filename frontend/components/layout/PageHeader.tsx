@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname } from "next/navigation"
-import { LayoutDashboard, TriangleAlert, Map, Settings, Activity } from "lucide-react"
+import { LayoutDashboard, TriangleAlert, Map, Settings, Activity, LineChart } from "lucide-react"
 
 export interface PageHeaderProps {
   title?: string
@@ -31,6 +31,11 @@ export function PageHeader({ title, description }: PageHeaderProps = {}) {
       title: "Configuración",
       description: "Ajustes de la plataforma y preferencias",
       icon: Settings
+    },
+    "/historial-clinico": {
+      title: "Historial Clínico",
+      description: "Evolución de estados por vaca",
+      icon: LineChart
     }
   }
 

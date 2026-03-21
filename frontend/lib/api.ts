@@ -157,6 +157,43 @@ export async function getHealthHistory(
   }
 }
 
+export async function getClinicalHistory(days = 7): Promise<{
+  days: number;
+  from_date: string;
+  to_date: string;
+  cows: Array<{
+    cow_id: number;
+    total_points: number;
+    transitions: number;
+    stable: boolean;
+    latest_status: string;
+    points: Array<{
+      created_at: string;
+      status: string;
+      confidence: number | null;
+      primary_status: string | null;
+      primary_confidence: number | null;
+      secondary_status: string | null;
+      secondary_confidence: number | null;
+    }>;
+  }>;
+} | null> {
+  try {
+    const safeDays = Number.isFinite(days) ? Math.max(1, Math.min(30, Math.floor(days))) : 7;
+    const res = await fetchWithRetry(
+      `${API_BASE_URL}/health/clinical-history?days=${safeDays}`,
+      {
+        cache: "no-store",
+      },
+    );
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch clinical history:", err);
+    return null;
+  }
+}
+
 export async function getLatestHealthByHistory(
   cowId: number,
 ): Promise<any | null> {

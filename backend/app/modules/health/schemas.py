@@ -40,3 +40,29 @@ class HealthSchedulerRuntimeResponse(BaseModel):
     last_execution_at: datetime | None
     current_per_cow_seconds: int | None
     eligible_cows_count: int
+
+
+class ClinicalHistoryPointResponse(BaseModel):
+    created_at: datetime
+    status: HealthStatus
+    confidence: float | None = None
+    primary_status: HealthStatus | None = None
+    primary_confidence: float | None = None
+    secondary_status: HealthStatus | None = None
+    secondary_confidence: float | None = None
+
+
+class CowClinicalHistoryResponse(BaseModel):
+    cow_id: int
+    total_points: int
+    transitions: int
+    stable: bool
+    latest_status: HealthStatus
+    points: list[ClinicalHistoryPointResponse]
+
+
+class ClinicalHistoryResponse(BaseModel):
+    days: int
+    from_date: datetime
+    to_date: datetime
+    cows: list[CowClinicalHistoryResponse]

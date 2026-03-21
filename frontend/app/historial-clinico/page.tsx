@@ -1,0 +1,242 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import { PageHeader } from "@/components/layout/PageHeader";
+import { getClinicalHistory } from "@/lib/api";
+
+type ClinicalPoint = {
+  created_at: string;
+  status: string;
+  confidence: number | null;
+};
+
+type CowHistory = {
+  cow_id: number;
+  total_points: number;
+  transitions: number;
+  stable: boolean;
+  latest_status: string;
+  points: ClinicalPoint[];
+};
+
+type ClinicalHistoryResponse = {
+  days: number;
+  from_date: string;
+  to_date: string;
+  cows: CowHistory[];
+};
+
+const STATUS_TO_LEVEL: Record<string, number> = {
+  SANA: 0,
+  DIGESTIVO: 1,
+  FEBRIL: 2,
+  CELO: 3,
+  MASTITIS: 4,
+};
+
+const LEVEL_TO_STATUS: Record<number, string> = {
+  0: "SANA",
+  1: "DIGESTIVO",
+  2: "FEBRIL",
+  3: "CELO",
+  4: "MASTITIS",
+};
+
+function normalizeStatus(status: string | null | undefined): string {
+  if (!status) return "SANA";
+  return String(status).toUpperCase();
+}
+
+function formatStatus(status: string): string {
+  const labels: Record<string, string> = {
+    SANA: "Sana",
+    MASTITIS: "Mastitis",
+    CELO: "Celo",
+    FEBRIL: "Febril",
+    DIGESTIVO: "Digestivo",
+  };
+  return labels[status] || status;
+}
+
+function statusColor(status: string): string {
+  const palette: Record<string, string> = {
+    SANA: "#16a34a",
+    MASTITIS: "#dc2626",
+    CELO: "#ec4899",
+    FEBRIL: "#eab308",
+    DIGESTIVO: "#f97316",
+  };
+  return palette[status] || "#94a3b8";
+}
+
+export default function HistorialClinicoPage() {
+  const [days, setDays] = useState(7);
+  const [isLoading, setIsLoading] = useState(true);
+  const [data, setData] = useState<ClinicalHistoryResponse | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      setIsLoading(true);
+      const response = await getClinicalHistory(days);
+      if (isMounted) {
+        setData(response as ClinicalHistoryResponse | null);
+        setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [days]);
+
+  const cows = useMemo(() => {
+    if (!data?.cows) return [];
+    return [...data.cows].sort((a, b) => a.cow_id - b.cow_id);
+  }, [data]);
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden text-on-surface bg-surface">
+      <PageHeader />
+
+      <div className="flex-1 p-6 overflow-y-auto space-y-5">
+        <section className="glass-panel rounded-xl border border-outline-variant/30 p-4 flex flex-wrap items-center gap-3 justify-between">
+          <div>
+            <p className="text-body-md font-semibold">Rango de análisis</p>
+            <p className="text-label-sm text-on-surface-variant">
+              Elegí cuántos días hacia atrás querés ver (1 a 30 días).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {[1, 7, 30].map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setDays(value)}
+                className={
+                  value === days
+                    ? "rounded-md border border-primary bg-primary/20 px-3 py-1.5 text-sm font-semibold text-primary"
+                    : "rounded-md border border-outline-variant/30 bg-surface-container px-3 py-1.5 text-sm text-on-surface-variant"
+                }
+              >
+                {value} día{value === 1 ? "" : "s"}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {isLoading ? (
+          <div className="rounded-xl border border-outline-variant/30 p-8 text-center text-on-surface-variant">
+            Cargando historial clínico...
+          </div>
+        ) : cows.length === 0 ? (
+          <div className="rounded-xl border border-outline-variant/30 p-8 text-center text-on-surface-variant">
+            No hay vacas con historial clínico en el rango seleccionado.
+          </div>
+        ) : (
+          <section className="space-y-4">
+            {cows.map((cow) => {
+              const chartData = cow.points.map((point) => {
+                const normalized = normalizeStatus(point.status);
+                return {
+                  x: new Date(point.created_at).toLocaleString([], {
+                    month: "2-digit",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                  y: STATUS_TO_LEVEL[normalized] ?? 0,
+                  status: normalized,
+                  confidence: point.confidence,
+                };
+              });
+
+              const latestStatus = normalizeStatus(cow.latest_status);
+              const latestColor = statusColor(latestStatus);
+
+              return (
+                <article
+                  key={cow.cow_id}
+                  className="rounded-xl border border-outline-variant/30 bg-surface-container p-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h3 className="text-body-lg font-semibold">Vaca #{cow.cow_id}</h3>
+                      <p className="text-label-sm text-on-surface-variant">
+                        {cow.total_points} registros, {cow.transitions} cambios de estado
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+                      style={{ backgroundColor: `${latestColor}22`, color: latestColor }}>
+                      Estado actual: {formatStatus(latestStatus)}
+                    </div>
+                  </div>
+
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
+                        <CartesianGrid stroke="rgba(148,163,184,0.2)" strokeDasharray="4 4" />
+                        <XAxis dataKey="x" tick={{ fill: "#94a3b8", fontSize: 11 }} minTickGap={24} />
+                        <YAxis
+                          type="number"
+                          domain={[0, 4]}
+                          ticks={[0, 1, 2, 3, 4]}
+                          tickFormatter={(value) => formatStatus(LEVEL_TO_STATUS[value] || "SANA")}
+                          tick={{ fill: "#94a3b8", fontSize: 11 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            background: "#0f172a",
+                            border: "1px solid rgba(148,163,184,0.3)",
+                            borderRadius: 8,
+                            color: "#e2e8f0",
+                          }}
+                          formatter={(value, _, item) => {
+                            const status = item?.payload?.status || "SANA";
+                            const confidence = item?.payload?.confidence;
+                            const confText = typeof confidence === "number"
+                              ? ` | certeza ${(confidence * 100).toFixed(1)}%`
+                              : "";
+                            return [`${formatStatus(status)}${confText}`, "Estado"];
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="y"
+                          stroke={latestColor}
+                          strokeWidth={2.5}
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  <p className="mt-2 text-label-sm text-on-surface-variant">
+                    {cow.stable
+                      ? "Se mantuvo estable durante el período seleccionado."
+                      : "Mostró cambios de estado durante el período seleccionado."}
+                  </p>
+                </article>
+              );
+            })}
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -242,7 +242,12 @@ export default function MapaRodeoPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Clock3 className="w-4 h-4 text-on-surface-variant" />
+            <span className="relative inline-flex items-center group">
+              <Clock3 className="w-4 h-4 text-on-surface-variant" />
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-9999 mb-2 w-72 -translate-x-1/2 rounded-md bg-slate-900 px-3 py-2 text-[11px] font-normal leading-relaxed text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                Este valor define cada cuántos segundos se recarga el mapa y se consulta la última lectura disponible de cada vaca.
+              </span>
+            </span>
             <label htmlFor="refresh-seconds" className="text-label-sm text-on-surface-variant">
               Actualización (seg)
             </label>

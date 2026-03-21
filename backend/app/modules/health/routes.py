@@ -10,6 +10,7 @@ from app.integrations.ai_client import AIClient
 from app.modules.health.controller import HealthController
 from app.modules.health.models import HealthSchedulerConfig
 from app.modules.health.schemas import (
+    ClinicalHistoryResponse,
     HealthAnalysisResponse,
     HealthSchedulerConfigResponse,
     HealthSchedulerConfigUpdate,
@@ -48,6 +49,21 @@ async def get_latest_health_status(
 def get_health_history(cow_id: int, db: Session = Depends(get_db)) -> list[HealthAnalysisResponse]:
     controller = HealthController(HealthService(db=db, ai_client=AIClient()))
     return controller.history(cow_id)
+
+
+@router.get("/clinical-history", response_model=ClinicalHistoryResponse)
+def get_clinical_history(
+    days: int = Query(default=7, ge=1, le=30),
+    db: Session = Depends(get_db),
+) -> ClinicalHistoryResponse:
+    controller = HealthController(HealthService(db=db, ai_client=AIClient()))
+    from_date, to_date, cows = controller.clinical_history(days)
+    return ClinicalHistoryResponse(
+        days=days,
+        from_date=from_date,
+        to_date=to_date,
+        cows=cows,
+    )
 
 
 @router.get("/scheduler/config", response_model=HealthSchedulerConfigResponse)

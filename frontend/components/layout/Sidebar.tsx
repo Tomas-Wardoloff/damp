@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Map as MapIcon,
   Settings,
+  LineChart,
   ChevronLeft,
   ChevronRight,
   Activity
@@ -21,6 +22,7 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Mapa de Rodeo", href: "/mapa", icon: MapIcon },
+    { name: "Historial Clínico", href: "/historial-clinico", icon: LineChart },
     { name: "Configuración", href: "/configuracion", icon: Settings },
   ]
 
