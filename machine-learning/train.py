@@ -29,7 +29,16 @@ NUMERIC_FEATURES = [
     "velocidad_movimiento_prom",
 ]
 BOOL_FEATURES = ["hubo_rumia", "hubo_vocalizacion"]
-LABEL_COLORS  = {"sana": "#2ecc71", "sub_clinica": "#f39c12", "clinica": "#e74c3c"}
+
+
+LABEL_COLORS = {
+    "sana":        "#2ecc71",
+    "sub_clinica": "#f39c12",
+    "mastitis":    "#e74c3c",
+    "celo":        "#9b59b6",
+    "febril":      "#e67e22",
+    "digestivo":   "#1abc9c",
+}
 
 
 #Generacion de features para entrenar al modelo
@@ -61,6 +70,17 @@ def extract_window_features(window: pd.DataFrame) -> dict:
         lat_range = window["latitud"].max() - window["latitud"].min()
         lon_range = window["longitud"].max() - window["longitud"].min()
         feats["gps_spread"] = np.sqrt(lat_range**2 + lon_range**2) * 111000
+
+    #metemos nueva feature para deteccion de patrones nocturnos   
+    if "timestamp" in window.columns:
+        hours = pd.to_datetime(window["timestamp"]).dt.hour.values
+        feats["hour_mean"]       = np.mean(hours)
+        feats["night_ratio"]     = np.mean((hours >= 22) | (hours <= 5))  # % registros nocturnos
+        feats["metro_night_mean"] = np.mean(                              # movimiento nocturno
+            window["metros_recorridos"].values[
+                (hours >= 22) | (hours <= 5)
+            ]
+        ) if np.any((hours >= 22) | (hours <= 5)) else 0.0
 
     return feats
 
@@ -96,10 +116,10 @@ def make_model() -> Pipeline:
         ("imputer", SimpleImputer(strategy="median")), #Completamos posibles datos faltantes
         ("scaler",  StandardScaler()), #Normalizamos
         ("clf",     GradientBoostingClassifier(
-            n_estimators=200,
-            learning_rate=0.08,
+            n_estimators=300,      # era 200 → más árboles para 6 clases
+            learning_rate=0.07,    # era 0.08 → un poco más conservador
             max_depth=4,
-            min_samples_leaf=20,
+            min_samples_leaf=15,   # era 20 → más flexibilidad por clase
             subsample=0.8,
             random_state=SEED,
         )),
@@ -221,7 +241,7 @@ def plot_diagnostics(pipeline: Pipeline, le, X_test: pd.DataFrame,
             continue
         parts = ax1.violinplot(
             data_by_feat,
-            positions=positions + (i - 1) * width,
+            positions + (i - (len(labels) - 1) / 2) * width,
             widths=width * 0.88,
             showmedians=True,
         )
@@ -354,6 +374,28 @@ def plot_diagnostics(pipeline: Pipeline, le, X_test: pd.DataFrame,
     plt.show()
 
 
+def get_next_model_path(base_dir: str = "models/nuevas-clases") -> Path:
+    """
+    Busca los .pkl existentes en base_dir y devuelve el siguiente path versionado.
+    Ej: mastitis_model_v1.pkl → mastitis_model_v2.pkl
+    """
+    folder = Path(base_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    existing = sorted(folder.glob("mastitis_model_v*.pkl"))
+
+    if not existing:
+        next_version = 1
+    else:
+        # Extrae el número de la última versión encontrada
+        last = existing[-1].stem          # "mastitis_model_v3"
+        last_num = last.rsplit("_v", 1)[-1]
+        next_version = int(last_num) + 1
+
+    new_path = folder / f"mastitis_model_v{next_version}.pkl"
+    return new_path, next_version, len(existing)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -368,7 +410,7 @@ def main():
     print(f"  → {len(X):,} ventanas | {X.shape[1]} features")
 
     unique, counts = np.unique(y, return_counts=True)
-    
+
     print("\n  Distribución de ventanas por clase:")
     for cls_idx, cnt in zip(unique, counts):
         print(f"    {le.classes_[cls_idx]:12s}: {cnt:,} ({cnt/len(y)*100:.1f}%)")
@@ -384,6 +426,8 @@ def main():
         list(X.columns),
     )
 
+    model_path, version, prev_count = get_next_model_path()
+
     artifact = {
         "model":            final_pipeline,
         "label_encoder":    le,
@@ -391,10 +435,20 @@ def main():
         "window_size":      WINDOW_SIZE,
         "numeric_features": NUMERIC_FEATURES,
         "bool_features":    BOOL_FEATURES,
+        "version":          version,
+        "trained_at":       pd.Timestamp.now().isoformat(),
+        "classes":          list(le.classes_),
+        "n_windows_train":  int((y == y).sum()),   # total ventanas usadas
     }
-    Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
-    with open(MODEL_PATH, "wb") as f:
+
+    with open(model_path, "wb") as f:
         pickle.dump(artifact, f)
+
+    print(f"\n✅ Modelo guardado en : {model_path}")
+    print(f"   Versión            : v{version}")
+    print(f"   Versiones previas  : {prev_count}")
+    print(f"   Clases             : {list(le.classes_)}")
+    print("   Para inferencia    : python predict.py")
 
     print(f"\n✅ Modelo guardado en: {MODEL_PATH}")
     print("   Para inferencia: python predict.py")
