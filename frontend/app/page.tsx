@@ -1,6 +1,5 @@
 "use client"
 
-import * as React from "react"
 import { useState, useEffect } from "react"
 import { SummaryMetrics } from "@/components/dashboard/SummaryMetrics"
 import { HerdMap } from "@/components/dashboard/HerdMap"

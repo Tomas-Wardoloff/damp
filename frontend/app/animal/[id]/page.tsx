@@ -10,6 +10,7 @@ import { DiagnosisPanel } from "@/components/animal/DiagnosisPanel"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
+import { HealthHistoryTimeline } from "@/components/animal/HealthHistoryTimeline"
 import { CowStatus } from "@/types"
 
 export default function AnimalDetail() {
@@ -56,7 +57,7 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus } = data
+  const { animal, chartData, healthStatus, healthHistory } = data
 
   function formatTimeInSystem(dateString: string) {
     if (!dateString) return "Desconocido";
@@ -157,6 +158,10 @@ export default function AnimalDetail() {
               confidence={healthStatus.confidence}
             />
           )}
+        </section>
+
+        <section className="mt-4">
+          <HealthHistoryTimeline history={healthHistory} />
         </section>
       </div>
     </div>

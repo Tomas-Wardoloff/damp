@@ -81,26 +81,42 @@ export async function fetchDashboardData(): Promise<{
     getCows(),
   ]);
 
-  if (!cows || cows.length === 0) {
+  // Consolidate unique cows from BOTH database and active latest readings
+  const allCowIds = new Set<number>();
+  const cowInfoMap = new Map();
+  const readingMap = new Map();
+
+  if (cows && Array.isArray(cows)) {
+    cows.forEach((cow) => {
+      const cowId = cow.id || cow.cow_id;
+      allCowIds.add(cowId);
+      cowInfoMap.set(cowId, cow);
+    });
+  }
+
+  if (latestReadings && Array.isArray(latestReadings)) {
+    latestReadings.forEach((reading) => {
+      const cowId = reading.cow_id || reading.id;
+      allCowIds.add(cowId);
+      readingMap.set(cowId, reading);
+    });
+  }
+
+  // If we have literally 0 cows in both lists
+  if (allCowIds.size === 0) {
     return { animals: [], alerts: [] };
   }
 
-  const readingMap = new Map();
-  if (latestReadings) {
-    latestReadings.forEach((reading) =>
-      readingMap.set(reading.cow_id, reading),
-    );
-  }
-
+  const allCowsArray = Array.from(allCowIds);
   const animals: Animal[] = [];
   const chunkSize = 5;
 
-  for (let i = 0; i < cows.length; i += chunkSize) {
-    const chunk = cows.slice(i, i + chunkSize);
+  for (let i = 0; i < allCowsArray.length; i += chunkSize) {
+    const chunk = allCowsArray.slice(i, i + chunkSize);
 
     const chunkResults = await Promise.all(
-      chunk.map(async (cow) => {
-        const cowId = cow.id || cow.cow_id;
+      chunk.map(async (cowId) => {
+        const cow = cowInfoMap.get(cowId) || {};
         const reading = readingMap.get(cowId);
         const health = await getHealthStatus(cowId);
 
