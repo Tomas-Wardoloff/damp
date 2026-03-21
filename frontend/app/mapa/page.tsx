@@ -81,11 +81,13 @@ export default function MapaRodeoPage() {
   const loadMapData = useCallback(async () => {
     try {
       const latestReadings = await getLatestReadings();
+      const nowMs = Date.now();
 
       const validReadings = latestReadings.filter((reading) => {
         const lat = toNumber(reading?.latitud);
         const lng = toNumber(reading?.longitud);
-        return lat !== null && lng !== null;
+        const ts = Date.parse(String(reading?.timestamp ?? ""));
+        return lat !== null && lng !== null && Number.isFinite(ts) && ts <= nowMs;
       });
 
       const uniqueCowIds = Array.from(

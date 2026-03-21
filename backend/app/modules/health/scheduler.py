@@ -147,12 +147,16 @@ def _ordered_assigned_cow_ids_by_oldest_health(db, assigned_cow_ids: list[int]) 
     if not assigned_cow_ids:
         return []
 
+    now_utc = datetime.utcnow()
     latest_by_cow_stmt = (
         select(
             HealthAnalysis.cow_id,
             func.max(HealthAnalysis.created_at).label("latest_at"),
         )
-        .where(HealthAnalysis.cow_id.in_(assigned_cow_ids))
+        .where(
+            HealthAnalysis.cow_id.in_(assigned_cow_ids),
+            HealthAnalysis.created_at <= now_utc,
+        )
         .group_by(HealthAnalysis.cow_id)
     )
     latest_by_cow_rows = db.execute(latest_by_cow_stmt).all()

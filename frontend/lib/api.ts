@@ -94,6 +94,12 @@ function normalizeCowStatus(status: string | undefined): string {
   return status;
 }
 
+function isNotFutureDate(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed <= Date.now();
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function getCows(): Promise<any[]> {
   try {
@@ -119,7 +125,9 @@ export async function getLatestReading(cowId: number): Promise<any | null> {
     if (!res.ok) return null;
 
     const data = await res.json();
-    return data?.items && data.items.length > 0 ? data.items[0] : null;
+    const latest = data?.items && data.items.length > 0 ? data.items[0] : null;
+    if (!latest) return null;
+    return isNotFutureDate(latest.timestamp) ? latest : null;
   } catch (err) {
     console.error(`Failed to fetch reading for cow ${cowId}:`, err);
     return null;
@@ -132,8 +140,13 @@ export async function getHealthStatus(cowId: number): Promise<any | null> {
       cache: "no-store",
     });
     if (!res.ok) return null;
-    return await res.json();
+    const health = await res.json();
+    if (!health?.created_at) return health;
+    return isNotFutureDate(health.created_at) ? health : null;
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return null;
+    }
     console.error(`Failed to fetch health status for cow ${cowId}:`, err);
     return null;
   }
@@ -150,7 +163,9 @@ export async function getHealthHistory(
       },
     );
     if (!res.ok) return [];
-    return await res.json();
+    const history = await res.json();
+    if (!Array.isArray(history)) return [];
+    return history.filter((item) => isNotFutureDate(item?.created_at));
   } catch (err) {
     console.error(`Failed to fetch health history for cow ${cowId}:`, err);
     return [];
@@ -215,8 +230,13 @@ export async function getLatestReadings(): Promise<any[]> {
       cache: "no-store",
     });
     if (!res.ok) return [];
-    return await res.json();
+    const readings = await res.json();
+    if (!Array.isArray(readings)) return [];
+    return readings.filter((reading) => isNotFutureDate(reading?.timestamp));
   } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return [];
+    }
     console.error("Failed to fetch latest readings:", err);
     return [];
   }
@@ -356,7 +376,9 @@ export async function fetchAnimalDetail(idString: string) {
     ? readingsRes
     : readingsRes?.items || readingsRes?.readings || [];
 
-  const chartData = rawReadings
+  const validReadings = rawReadings.filter((r: any) => isNotFutureDate(r?.timestamp));
+
+  const chartData = validReadings
     .map((r: any) => ({
       time: new Date(r.timestamp).toLocaleTimeString([], {
         hour: "2-digit",
@@ -366,7 +388,7 @@ export async function fetchAnimalDetail(idString: string) {
     }))
     .reverse();
 
-  const latestReading = rawReadings.length > 0 ? rawReadings[0] : null;
+  const latestReading = validReadings.length > 0 ? validReadings[0] : null;
   const prediction = pickEffectivePrediction(healthStatus);
 
   const frontendStatus = toFrontendStatus(prediction.status);
