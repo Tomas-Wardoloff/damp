@@ -9,10 +9,10 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 export const buttonVariants = (variant: string = "primary", size: string = "default", className?: string) => {
-  const baseClasses = "inline-flex items-center transition-all disabled:opacity-50 disabled:pointer-events-none"
-  
+  const baseClasses = "cursor-pointer inline-flex items-center transition-all disabled:opacity-50 disabled:pointer-events-none"
+
   const variants = {
-    primary: "bg-primary-container text-on-primary-container font-medium rounded-md justify-center bg-[linear-gradient(145deg,var(--color-primary),var(--color-primary-container))]", 
+    primary: "bg-primary-container text-on-primary-container font-medium rounded-md justify-center bg-[linear-gradient(145deg,var(--color-primary),var(--color-primary-container))]",
     secondary: "bg-transparent text-primary rounded-md justify-center border border-outline-variant",
     outline: "border border-outline-variant rounded hover:bg-surface-container text-on-surface-variant justify-center",
     ghost: "text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-md",
