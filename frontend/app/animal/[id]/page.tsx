@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { Stethoscope, Activity, ArrowLeft } from "lucide-react"
+import { IterationCcwIcon, Activity, ArrowLeft } from "lucide-react"
 import { PageHeader } from "@/components/layout/PageHeader"
 import { BiometricCards } from "@/components/animal/BiometricCards"
 import { BiometricChart } from "@/components/animal/BiometricChart"
@@ -10,8 +10,25 @@ import { DiagnosisPanel } from "@/components/animal/DiagnosisPanel"
 import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
-// Keep mock generator just for filling chart if DB has no historical data yet
+import { CowStatus } from "@/types"
 import { generateBiometricData } from "@/lib/mock-data"
+
+function getStressLevel(rmssd: number, sdnn: number) {
+  if (rmssd === 0 && sdnn === 0) return { value: "N/A", status: "normal" as const }
+  if (rmssd < 20 || sdnn < 30) return { value: "Alto", status: "high" as const }
+  if (rmssd < 40 || sdnn < 50) return { value: "Moderado", status: "warning" as const }
+  return { value: "Bajo", status: "normal" as const }
+}
+
+function formatTimeInSystem(dateStr: string) {
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMonths = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+  if (diffMonths === 0) return "Menos de 1 mes";
+  if (diffMonths === 1) return "1 mes";
+  return `${diffMonths} meses`;
+}
 
 export default function AnimalDetail() {
   const router = useRouter()
@@ -51,53 +68,66 @@ export default function AnimalDetail() {
   if (!data) {
     return (
       <div className="flex flex-col h-screen text-on-surface bg-surface items-center justify-center gap-4">
-        <p className="font-mono text-label-md text-tertiary">Error: Animal no encontrado en el servidor.</p>
+        <p className="font-mono text-label-md text-tertiary">Error: Animal no encontrado.</p>
         <Button variant="secondary" onClick={() => router.back()}>Volver al Dashboard</Button>
       </div>
     )
   }
 
-  const { animal, chartData, healthStatus } = data
-  const isCritical = animal.status === "critical"
-  const biometricsStatus = isCritical ? "high" as const : "normal" as const
+  const { animal, chartData, healthStatus, prediction } = data
 
   const biometrics = {
-    temperature: { value: animal.temperature, status: biometricsStatus },
-    heartRate: { value: animal.heartRate, status: biometricsStatus },
-    distance: { value: animal.distance, status: biometricsStatus },
-    rumination: { value: animal.rumination, status: isCritical ? ("low" as const) : ("normal" as const) }
+    temperature: {
+      value: typeof animal.temperature === 'number' ? animal.temperature.toFixed(1) : animal.temperature,
+      status: (animal.temperature >= 38.0 && animal.temperature <= 39.2) ? "normal" as const : "high" as const
+    },
+    heartRate: {
+      value: animal.heartRate,
+      status: (animal.heartRate >= 48 && animal.heartRate <= 84) ? "normal" as const : "high" as const
+    },
+    distance: {
+      value: animal.distance,
+      status: "normal" as const
+    },
+    stress: getStressLevel(animal.rmssd || 0, animal.sdnn || 0),
+    rumination: {
+      value: animal.rumination ? "Con rumia" : "Sin rumia",
+      status: animal.rumination ? "normal" as const : "high" as const
+    },
+    vocalization: {
+      value: animal.vocalization ? "Detectada" : "No detectada",
+      status: animal.vocalization ? "high" as const : "normal" as const
+    }
   }
 
   // If backend returned less than 2 data points, we can't draw a line very well. Use fake history if needed.
-  const displayChartData = chartData.length > 1 ? chartData : generateBiometricData()
+  const displayChartData = chartData.length > 0 ? chartData : []
 
-  // AI Diagnosis Logic default fallbacks if API doesn't provide nice strings
-  let conditionStr = "Parámetros estables. Funciones biológicas dentro de los márgenes previstos."
-  let confPercent = 94
-  let recomStr = "Mantener monitoreo pasivo. No requiere intervención inmediata."
+  // AI Diagnosis Logic with new model payload format (primary + secondary)
+  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "HEALTHY"
+  const primaryConf = prediction?.primary?.confidence ?? healthStatus?.primary_confidence ?? healthStatus?.confidence ?? 0
+  const secondaryLabel = prediction?.secondary?.status || healthStatus?.secondary_status || null
+  const secondaryConf = prediction?.secondary?.confidence ?? healthStatus?.secondary_confidence ?? null
 
-  if (isCritical) {
-    conditionStr = healthStatus?.condition || "Alerta Roja. Probabilidad alta de Mastitis Clínica."
-    confPercent = healthStatus?.confidence || 87
-    recomStr = healthStatus?.recommendation || "Contactar veterinario. Identificar cuarto mamario afectado e iniciar protocolo de aislamiento."
-  } else if (animal.status === "warning") {
-    conditionStr = healthStatus?.condition || "Anomalía leve detectada. Posible estrés térmico o pre-clínico."
-    confPercent = healthStatus?.confidence || 76
-    recomStr = healthStatus?.recommendation || "Elevar prioridad de observación durante el ordeñe. Verificar ingesta de agua."
+  let effectiveLabel = primaryLabel
+  let effectiveConf = primaryConf
+  if (secondaryLabel && secondaryConf !== null && secondaryConf > effectiveConf) {
+    effectiveLabel = secondaryLabel
+    effectiveConf = secondaryConf
   }
 
   return (
     <div className="flex flex-col h-screen overflow-y-auto text-on-surface bg-surface">
       <PageHeader
-        title={`Animal #${animal.id}`}
-        description={`Última act: ${animal.lastUpdated}`}
+        title={`Vaca #${animal.id} - ${animal.breed}`}
+        description={`Registrada hace: ${formatTimeInSystem(animal.registrationDate)} | Ultima Act: ${animal.lastUpdated}`}
       />
 
       <div className="p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={() => router.back()} 
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => router.back()}
           className="w-fit -ml-2 text-on-surface-variant hover:text-on-surface"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -107,11 +137,11 @@ export default function AnimalDetail() {
         <div className="flex items-center justify-between bg-surface-container-low p-4 rounded-lg border border-outline-variant/50">
           <div className="flex items-center gap-3">
             <span className="text-body-md font-medium text-on-surface-variant">Estado actual:</span>
-            {animal.status && <StatusBadge status={animal.status as "healthy" | "warning" | "critical"} pulse={animal.status !== 'healthy'} />}
+            <StatusBadge status={animal.status} pulse={animal.status !== 'sana'} />
           </div>
           <Button variant="primary" className="gap-2 w-fit">
-            <Stethoscope className="w-4 h-4" />
-            REGISTRAR INTERVENCIÓN
+            <IterationCcwIcon className="w-4 h-4" />
+            Realizar Analisis
           </Button>
         </div>
         <section>
@@ -123,15 +153,13 @@ export default function AnimalDetail() {
             data={displayChartData}
             metricName="Temperatura Corporal"
             normalRange={[38.0, 39.2]}
-            color={isCritical ? "var(--color-tertiary)" : "var(--color-secondary)"}
           />
         </section>
 
         <section className="mt-4">
           <DiagnosisPanel
-            condition={conditionStr}
-            confidence={confPercent}
-            recommendation={recomStr}
+            status={effectiveLabel as CowStatus}
+            confidence={effectiveConf}
           />
         </section>
       </div>

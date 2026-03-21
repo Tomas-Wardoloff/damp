@@ -7,9 +7,9 @@ export interface Animal {
   id: string
   breed?: string
   status: Status
-  temperature: number
-  heartRate: number
-  distance: number
+  temperature: number | string
+  heartRate: number | string
+  distance: number | string
   lastUpdated: string
 }
 
@@ -22,7 +22,7 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
     healthy: "border-primary/20 hover:border-primary/50",
     warning: "border-secondary/30 hover:border-secondary/60",
     critical: "border-tertiary/40 hover:border-tertiary/80"
-  }[animal.status]
+  }[animal.status] || "border-outline-variant/50 hover:border-outline-variant"
 
   return (
     <div
@@ -43,13 +43,15 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
             {animal.breed}
           </p>
         </div>
-        <StatusBadge status={animal.status} pulse={animal.status !== 'healthy'} />
+        <StatusBadge status={animal.status} pulse={animal.status !== 'healthy' && animal.status !== 'sana'} />
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2 gap-y-3">
         <div className="flex items-center gap-2">
           <Thermometer className="w-4 h-4 text-on-surface-variant group-hover:text-secondary drop-shadow-sm transition-colors" />
-          <span className="text-body-md whitespace-nowrap">{animal.temperature.toFixed(1)}°C</span>
+          <span className="text-body-md whitespace-nowrap">
+            {typeof animal.temperature === 'number' ? animal.temperature.toFixed(1) : animal.temperature}°C
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <Heart className="w-4 h-4 text-on-surface-variant group-hover:text-tertiary drop-shadow-sm transition-colors" />

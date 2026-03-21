@@ -1,10 +1,72 @@
 import { type Animal } from "@/components/animal/AnimalCard";
 import { type Alert } from "@/components/alerts/AlertFeed";
+import { HealthAnalysisResponse } from "@/types";
+import { MOCK_ALERTS } from "./mock-data";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-// Mock alerts for now since the backend doesn't explicitly have an alerts endpoint defined
-import { MOCK_ALERTS } from "./mock-data";
+function pickEffectivePrediction(health: Record<string, unknown> | null | undefined): {
+  status: string | null;
+  confidence: number | null;
+  primary: { status: string | null; confidence: number | null };
+  secondary: { status: string | null; confidence: number | null };
+} {
+  const primaryStatus =
+    typeof health?.primary_status === "string"
+      ? health.primary_status
+      : typeof health?.status === "string"
+        ? health.status
+        : null;
+
+  const primaryConfidence =
+    typeof health?.primary_confidence === "number"
+      ? health.primary_confidence
+      : typeof health?.confidence === "number"
+        ? health.confidence
+        : null;
+
+  const secondaryStatus = typeof health?.secondary_status === "string" ? health.secondary_status : null;
+  const secondaryConfidence =
+    typeof health?.secondary_confidence === "number" ? health.secondary_confidence : null;
+
+  let effectiveStatus = primaryStatus;
+  let effectiveConfidence = primaryConfidence;
+
+  if (
+    secondaryStatus &&
+    secondaryConfidence !== null &&
+    (primaryConfidence === null || secondaryConfidence > primaryConfidence)
+  ) {
+    effectiveStatus = secondaryStatus;
+    effectiveConfidence = secondaryConfidence;
+  }
+
+  return {
+    status: effectiveStatus,
+    confidence: effectiveConfidence,
+    primary: { status: primaryStatus, confidence: primaryConfidence },
+    secondary: { status: secondaryStatus, confidence: secondaryConfidence },
+  };
+}
+
+function toFrontendStatus(status: string | null): "healthy" | "warning" | "critical" {
+  if (!status) return "healthy";
+
+  if (["CLINICA", "MASTITIS"].includes(status)) {
+    return "critical";
+  }
+
+  if (["SUBCLINICA", "FEBRIL", "DIGESTIVO"].includes(status)) {
+    return "warning";
+  }
+
+  return "healthy";
+}
+
+function normalizeCowStatus(status: string | undefined): string {
+  if (!status) return "HEALTHY";
+  return status === "SANA" ? "HEALTHY" : status;
+}
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export async function getCows(): Promise<any[]> {
@@ -20,11 +82,11 @@ export async function getCows(): Promise<any[]> {
 
 export async function getLatestReading(cowId: number): Promise<any | null> {
   try {
-    const res = await fetch(
-      `${API_BASE_URL}/cows/${cowId}/readings?page=1&size=1`,
-      { cache: "no-store" },
-    );
+    const res = await fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=1`, {
+      cache: "no-store",
+    });
     if (!res.ok) return null;
+
     const data = await res.json();
     return data?.items && data.items.length > 0 ? data.items[0] : null;
   } catch (err) {
@@ -46,6 +108,29 @@ export async function getHealthStatus(cowId: number): Promise<any | null> {
   }
 }
 
+export async function getHealthHistory(cowId: number): Promise<HealthAnalysisResponse[]> {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health/history/${cowId}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (err) {
+    console.error(`Failed to fetch health history for cow ${cowId}:`, err);
+    return [];
+  }
+}
+
+export async function getLatestHealthByHistory(cowId: number): Promise<any | null> {
+  try {
+    const history = await getHealthHistory(cowId);
+    return history.length > 0 ? history[0] : null;
+  } catch (err) {
+    console.error(`Failed to fetch latest health by history for cow ${cowId}:`, err);
+    return null;
+  }
+}
+
 export async function getLatestReadings(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE_URL}/readings/latests`, {
@@ -59,15 +144,57 @@ export async function getLatestReadings(): Promise<any[]> {
   }
 }
 
+export async function getHealthSchedulerConfig(): Promise<any | null> {
+  try {
+    const res = await fetch(`/api/health/scheduler/config`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch scheduler config:", err);
+    return null;
+  }
+}
+
+export async function updateHealthSchedulerConfig(payload: {
+  enabled: boolean;
+  cycle_minutes: number;
+}): Promise<any | null> {
+  try {
+    const res = await fetch(`/api/health/scheduler/config`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to update scheduler config:", err);
+    return null;
+  }
+}
+
+export async function getHealthSchedulerRuntime(): Promise<any | null> {
+  try {
+    const res = await fetch(`/api/health/scheduler/runtime`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error("Failed to fetch scheduler runtime:", err);
+    return null;
+  }
+}
+
 export async function fetchDashboardData(): Promise<{
   animals: Animal[];
   alerts: Alert[];
 }> {
-  // Parrallel request for dashboard speed
-  const [latestReadings, cows] = await Promise.all([
-    getLatestReadings(),
-    getCows(),
-  ]);
+  const [latestReadings, cows] = await Promise.all([getLatestReadings(), getCows()]);
 
   if (!latestReadings || latestReadings.length === 0) {
     return { animals: [], alerts: MOCK_ALERTS };
@@ -94,28 +221,15 @@ export async function fetchDashboardData(): Promise<{
       chunk.map(async (reading) => {
         const cowId = reading.cow_id;
         const health = await getHealthStatus(cowId);
-
-        // Map backend status to our frontend "healthy" | "warning" | "critical"
-        let frontendStatus: "healthy" | "warning" | "critical" = "healthy";
-        if (health && health.status) {
-          if (health.status === "CLINICA") {
-            frontendStatus = "critical";
-          } else if (health.status === "SUBCLINICA") {
-            frontendStatus = "warning";
-          }
-        }
+        const prediction = pickEffectivePrediction(health);
 
         return {
           id: String(cowId),
           breed: cowMap.get(cowId) || "Mestiza",
-          status: frontendStatus,
-          temperature: reading?.temperatura_corporal_prom || 38.5,
-          heartRate: reading?.frec_cardiaca_prom
-            ? Math.round(reading.frec_cardiaca_prom)
-            : 70,
-          distance: reading?.metros_recorridos
-            ? Math.round(reading.metros_recorridos)
-            : 0,
+          status: toFrontendStatus(prediction.status),
+          temperature: reading?.temperatura_corporal_prom ?? 38.5,
+          heartRate: reading?.frec_cardiaca_prom ? Math.round(reading.frec_cardiaca_prom) : 70,
+          distance: reading?.metros_recorridos ? Math.round(reading.metros_recorridos) : 0,
           lastUpdated: reading?.timestamp
             ? new Date(reading.timestamp).toLocaleString([], {
                 year: "numeric",
@@ -125,39 +239,32 @@ export async function fetchDashboardData(): Promise<{
                 minute: "2-digit",
               })
             : "N/A",
-        };
+        } satisfies Animal;
       }),
     );
 
     animals.push(...chunkResults);
   }
 
-  return { animals, alerts: MOCK_ALERTS }; // Keeping mock alerts for now
+  return { animals, alerts: MOCK_ALERTS };
 }
 
 export async function fetchAnimalDetail(idString: string) {
-  // Extract number from "AG-1"
   const cowId = parseInt(idString.replace(/\D/g, ""), 10);
-
   if (isNaN(cowId)) return null;
 
-  const [cowRes, readingsRes, healthStatus] = await Promise.all([
-    fetch(`${API_BASE_URL}/cows/${cowId}`, { cache: "no-store" }).then((r) =>
-      r.ok ? r.json() : null,
-    ),
+  const [cowRes, readingsRes, healthStatus, healthHistory] = await Promise.all([
+    fetch(`${API_BASE_URL}/cows/${cowId}`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)),
     fetch(`${API_BASE_URL}/cows/${cowId}/readings?page=1&size=288`, {
       cache: "no-store",
-    }).then((r) => (r.ok ? r.json() : [])), // Get last 24 hours (288 readings, 5 min intervals)
+    }).then((r) => (r.ok ? r.json() : [])),
     getHealthStatus(cowId),
+    getHealthHistory(cowId),
   ]);
 
   if (!cowRes) return null;
 
-  // Process readings for chart
-  // Check if readingsRes has an array inside (e.g. { items: [] }) or is an array
-  const rawReadings = Array.isArray(readingsRes)
-    ? readingsRes
-    : readingsRes?.items || readingsRes?.readings || [];
+  const rawReadings = Array.isArray(readingsRes) ? readingsRes : readingsRes?.items || readingsRes?.readings || [];
 
   const chartData = rawReadings
     .map((r: any) => ({
@@ -167,31 +274,35 @@ export async function fetchAnimalDetail(idString: string) {
       }),
       value: r.temperatura_corporal_prom,
     }))
-    .reverse(); // Assuming backend sorts DESC, we want ASC for chart
+    .reverse();
 
   const latestReading = rawReadings.length > 0 ? rawReadings[0] : null;
+  const prediction = pickEffectivePrediction(healthStatus);
 
-  let frontendStatus: "healthy" | "warning" | "critical" = "healthy";
-  if (healthStatus && healthStatus.status) {
-    if (healthStatus.status === "CLINICA") {
-      frontendStatus = "critical";
-    } else if (healthStatus.status === "SUBCLINICA") {
-      frontendStatus = "warning";
-    }
-  }
+  const frontendStatus = toFrontendStatus(prediction.status);
+
+  const normalizedHealthStatus = healthStatus
+    ? {
+        ...healthStatus,
+        status: normalizeCowStatus(healthStatus.status),
+        primary_status: normalizeCowStatus(healthStatus.primary_status),
+        secondary_status: normalizeCowStatus(healthStatus.secondary_status),
+      }
+    : null;
 
   const animalInfo = {
     id: idString,
     breed: cowRes.breed || "Mestiza",
+    ageMonths: cowRes.age_months || 0,
+    registrationDate: cowRes.registration_date || new Date().toISOString(),
     status: frontendStatus,
     temperature: latestReading?.temperatura_corporal_prom || 38.5,
-    heartRate: latestReading?.frec_cardiaca_prom
-      ? Math.round(latestReading.frec_cardiaca_prom)
-      : 70,
-    distance: latestReading?.metros_recorridos
-      ? Math.round(latestReading.metros_recorridos)
-      : 0,
-    rumination: latestReading?.hubo_rumia ? 40 : 15,
+    heartRate: latestReading?.frec_cardiaca_prom ? Math.round(latestReading.frec_cardiaca_prom) : 70,
+    distance: latestReading?.metros_recorridos ? Math.round(latestReading.metros_recorridos) : 0,
+    rumination: latestReading?.hubo_rumia ?? false,
+    rmssd: latestReading?.rmssd || 0,
+    sdnn: latestReading?.sdnn || 0,
+    vocalization: latestReading?.hubo_vocalizacion ?? false,
     lastUpdated: latestReading?.timestamp
       ? new Date(latestReading.timestamp).toLocaleString([], {
           year: "numeric",
@@ -203,5 +314,11 @@ export async function fetchAnimalDetail(idString: string) {
       : "N/A",
   };
 
-  return { animal: animalInfo, chartData, healthStatus };
+  return {
+    animal: animalInfo,
+    chartData,
+    healthStatus: normalizedHealthStatus,
+    healthHistory,
+    prediction,
+  };
 }

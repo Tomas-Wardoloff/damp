@@ -43,23 +43,53 @@ class HealthService:
         readings_for_model = [self._serialize_reading(r) for r in reversed(readings)]
 
         try:
-            status_value = await self.ai_client.predict(cow_id=cow_id, readings=readings_for_model)
-        except httpx.HTTPError as exc:
+            prediction = await self.ai_client.predict(cow_id=cow_id, readings=readings_for_model)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             logger.exception("AI service request failed for cow_id=%s", cow_id)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="AI service unavailable or returned an invalid response",
             ) from exc
 
-        analysis = HealthAnalysis(cow_id=cow_id, status=status_value)
+        ranked_candidates: list[tuple[HealthStatus, float | None]] = []
+        if prediction.primary_status is not None:
+            ranked_candidates.append((prediction.primary_status, prediction.primary_confidence))
+        if prediction.secondary_status is not None:
+            ranked_candidates.append((prediction.secondary_status, prediction.secondary_confidence))
+
+        if not ranked_candidates:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="AI service returned prediction without valid labels",
+            )
+
+        effective_status, effective_confidence = max(
+            ranked_candidates,
+            key=lambda item: item[1] if item[1] is not None else -1.0,
+        )
+
+        analysis = HealthAnalysis(
+            cow_id=cow_id,
+            model_cow_id=prediction.model_cow_id,
+            primary_status=prediction.primary_status,
+            primary_confidence=prediction.primary_confidence,
+            secondary_status=prediction.secondary_status,
+            secondary_confidence=prediction.secondary_confidence,
+            alert=prediction.alert,
+            n_readings_used=prediction.n_readings_used,
+            status=effective_status,
+            confidence=effective_confidence,
+        )
         self.db.add(analysis)
         self.db.commit()
         self.db.refresh(analysis)
 
-        if status_value == HealthStatus.CLINICA:
-            logger.critical("CRITICAL ALERT cow_id=%s status=%s", cow_id, status_value)
-        elif status_value == HealthStatus.SUBCLINICA:
-            logger.warning("WARNING ALERT cow_id=%s status=%s", cow_id, status_value)
+        if effective_status in {HealthStatus.CLINICA, HealthStatus.MASTITIS}:
+            logger.critical("CRITICAL ALERT cow_id=%s status=%s", cow_id, effective_status)
+        elif effective_status in {HealthStatus.SUBCLINICA, HealthStatus.FEBRIL, HealthStatus.DIGESTIVO}:
+            logger.warning("WARNING ALERT cow_id=%s status=%s", cow_id, effective_status)
+        elif effective_status == HealthStatus.CELO:
+            logger.info("EVENT cow_id=%s status=%s", cow_id, effective_status)
 
         return analysis
 
