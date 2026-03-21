@@ -10,8 +10,7 @@ import pickle
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.metrics import (classification_report, confusion_matrix,
-                             f1_score, accuracy_score)
+from sklearn.metrics import (classification_report, confusion_matrix, f1_score, accuracy_score)
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 
@@ -33,13 +32,13 @@ BOOL_FEATURES = ["hubo_rumia", "hubo_vocalizacion"]
 LABEL_COLORS  = {"sana": "#2ecc71", "sub_clinica": "#f39c12", "clinica": "#e74c3c"}
 
 
-# ── Feature Engineering ───────────────────────────────────────────────────────
-
+#Generacion de features para entrenar al modelo
 def extract_window_features(window: pd.DataFrame) -> dict:
     feats = {}
     n = len(window)
     x = np.arange(n)
 
+    #iteramos por cada feature base numerica
     for col in NUMERIC_FEATURES:
         vals = window[col].values.astype(float)
         feats[f"{col}_mean"]      = np.mean(vals)
@@ -69,6 +68,7 @@ def extract_window_features(window: pd.DataFrame) -> dict:
 def build_windowed_dataset(df: pd.DataFrame):
     all_feats, all_labels, all_groups = [], [], []
 
+    #agrupamos por animales y creamos ventanas de tiempo.
     for animal_id, group in df.groupby("animal_id"):
         group = group.sort_values("timestamp").reset_index(drop=True)
         n = len(group)
@@ -92,8 +92,9 @@ def build_windowed_dataset(df: pd.DataFrame):
 def make_model() -> Pipeline:
     """Pipeline: imputa NaNs → escala → clasifica."""
     return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler",  StandardScaler()),
+
+        ("imputer", SimpleImputer(strategy="median")), #Completamos posibles datos faltantes
+        ("scaler",  StandardScaler()), #Normalizamos
         ("clf",     GradientBoostingClassifier(
             n_estimators=200,
             learning_rate=0.08,
@@ -360,12 +361,14 @@ def main():
     df = pd.read_csv(CSV_PATH, parse_dates=["timestamp"])
     print(f"  {len(df):,} filas | {df['animal_id'].nunique()} animales")
     print(f"  Período: {df['timestamp'].min()} → {df['timestamp'].max()}")
-
     print(f"\nConstruyendo ventanas deslizantes (window={WINDOW_SIZE}, step={STEP_SIZE})...")
+
     X, y, groups, le = build_windowed_dataset(df)
+
     print(f"  → {len(X):,} ventanas | {X.shape[1]} features")
 
     unique, counts = np.unique(y, return_counts=True)
+    
     print("\n  Distribución de ventanas por clase:")
     for cls_idx, cnt in zip(unique, counts):
         print(f"    {le.classes_[cls_idx]:12s}: {cnt:,} ({cnt/len(y)*100:.1f}%)")

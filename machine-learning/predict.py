@@ -1,11 +1,12 @@
+import sys
 import numpy as np
 import pandas as pd
 import pickle
 from pathlib import Path
- 
+
+
 class MastitisPredictor:
     def __init__(self, model_path: str = "models/mastitis_model.pkl"):
-        # levantamos el modelo ya entrenado
         if not Path(model_path).exists():
             raise FileNotFoundError(
                 f"Modelo no encontrado: {model_path}\n"
@@ -13,26 +14,23 @@ class MastitisPredictor:
             )
         with open(model_path, "rb") as f:
             artifact = pickle.load(f)
- 
-        # MODIFICADO: self.model ahora es el Pipeline completo (Imputer -> Scaler -> GBC)
-        # Por ende, eliminamos self.scaler = artifact["scaler"]
+
         self.model            = artifact["model"]
         self.le               = artifact["label_encoder"]
         self.feature_names    = artifact["feature_names"]
         self.window_size      = artifact["window_size"]
         self.numeric_features = artifact["numeric_features"]
         self.bool_features    = artifact["bool_features"]
-        #self.static_features  = artifact["static_features"]
- 
+
         print(f"✅ Modelo cargado | window={self.window_size} | "
               f"clases={list(self.le.classes_)}")
- 
+
     def _extract_features(self, window: pd.DataFrame) -> pd.DataFrame:
         """Replica exacta del feature engineering de train.py."""
         feats = {}
         n = len(window)
         x = np.arange(n)
- 
+
         for col in self.numeric_features:
             vals = window[col].values.astype(float)
             feats[f"{col}_mean"]      = np.mean(vals)
@@ -45,48 +43,42 @@ class MastitisPredictor:
             slope = np.polyfit(x, vals, 1)[0] if np.std(x) > 0 else 0.0
             feats[f"{col}_slope"]     = slope
             feats[f"{col}_crossings"] = int(np.sum(np.diff(np.sign(vals - np.mean(vals))) != 0))
- 
+
         for col in self.bool_features:
             vals = window[col].values.astype(float)
             feats[f"{col}_rate"]   = np.mean(vals)
             feats[f"{col}_last10"] = np.mean(vals[-10:])
- 
-        # for col in self.static_features:
-        #     feats[col] = window[col].iloc[-1]
- 
+
         if "latitud" in window.columns and "longitud" in window.columns:
             lat_range = window["latitud"].max() - window["latitud"].min()
             lon_range = window["longitud"].max() - window["longitud"].min()
             feats["gps_spread"] = np.sqrt(lat_range**2 + lon_range**2) * 111000
- 
+
         return pd.DataFrame([feats])[self.feature_names]
- 
+
     def predict(self, records) -> dict:
         df = pd.DataFrame(records) if isinstance(records, list) else records.copy()
- 
+
         if len(df) < self.window_size:
             raise ValueError(
                 f"Se necesitan al menos {self.window_size} registros. "
                 f"Recibidos: {len(df)}"
             )
- 
-        window   = df.tail(self.window_size).reset_index(drop=True)
-        X_feat   = self._extract_features(window)
-        
-        # MODIFICADO: Ya no hacemos self.scaler.transform(X_feat)
-        # Le pasamos el DataFrame crudo directamente al pipeline. 
-        # El pipeline se encarga de: Imputar NaN -> Escalar -> Predecir.
-        proba_arr  = self.model.predict_proba(X_feat)[0]
-        
+
+        window    = df.tail(self.window_size).reset_index(drop=True)
+        X_feat    = self._extract_features(window)
+        proba_arr = self.model.predict_proba(X_feat)[0]
+
         pred_idx   = int(np.argmax(proba_arr))
         label      = self.le.classes_[pred_idx]
         confidence = float(proba_arr[pred_idx])
- 
+
+        # Usamos las clases reales del modelo como claves (sin asumir nombres)
         proba_dict = {
             cls: round(float(p), 4)
             for cls, p in zip(self.le.classes_, proba_arr)
         }
- 
+
         return {
             "label":          label,
             "confidence":     round(confidence, 4),
@@ -94,26 +86,25 @@ class MastitisPredictor:
             "alert":          label != "sana",
             "n_records_used": len(window),
         }
- 
+
     def predict_batch(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Predice el estado actual de múltiples animales a la vez.
-        """
+        """Predice el estado actual de múltiples animales a la vez."""
         results = []
         for animal_id, group in df.groupby("animal_id"):
             group_sorted = group.sort_values("timestamp")
             try:
                 pred = self.predict(group_sorted)
-                results.append({
-                    "animal_id":         animal_id,
-                    "label":             pred["label"],
-                    "confidence":        pred["confidence"],
-                    "alert":             pred["alert"],
-                    "proba_sana":        pred["proba"].get("sana", 0.0),
-                    "proba_sub_clinica": pred["proba"].get("sub_clinica", 0.0),
-                    "proba_clinica":     pred["proba"].get("clinica", 0.0),
-                    "n_records_used":    pred["n_records_used"],
-                })
+                row = {
+                    "animal_id":      animal_id,
+                    "label":          pred["label"],
+                    "confidence":     pred["confidence"],
+                    "alert":          pred["alert"],
+                    "n_records_used": pred["n_records_used"],
+                }
+                # Agrega una columna por cada clase que el modelo conozca
+                for cls, p in pred["proba"].items():
+                    row[f"proba_{cls}"] = p
+                results.append(row)
             except ValueError as e:
                 results.append({
                     "animal_id": animal_id,
@@ -121,63 +112,110 @@ class MastitisPredictor:
                     "alert":     None,
                     "error":     str(e),
                 })
- 
+
         return pd.DataFrame(results)
- 
- 
-# ── Función de alto nivel ─────────────────────────────────────────────────────
- 
-def predict_animal(records, model_path: str = "models/mastitis_model.pkl") -> dict:
-    """Shortcut stateless para un solo animal."""
-    return MastitisPredictor(model_path).predict(records)
- 
- 
+
+
+# ── Helpers de impresión ──────────────────────────────────────────────────────
+
+def _print_result(animal_id, real_label, result: dict):
+    alert_icon = "🚨" if result["alert"] else "✅"
+    print(f"\n  Animal #{animal_id}  |  Real: {real_label:15s}  |  "
+          f"Pred: {result['label']:15s}  {alert_icon}")
+    print(f"    Confianza : {result['confidence']:.1%}")
+    # Imprime todas las probabilidades usando las claves reales del dict
+    proba_str = "  ".join(
+        f"{cls}={p:.3f}" for cls, p in result["proba"].items()
+    )
+    print(f"    Probas    : {proba_str}")
+
+
+# ── Selector de CSV ───────────────────────────────────────────────────────────
+
+def _listar_csvs(data_dir: str = "data-pruebas/data") -> list[Path]:
+    """Devuelve lista ordenada de CSVs en el directorio."""
+    p = Path(data_dir)
+    if not p.exists():
+        print(f"❌ Directorio no encontrado: {data_dir}")
+        return []
+    csvs = sorted(p.glob("*.csv"))
+    return csvs
+
+
+def _seleccionar_csv(data_dir: str = "data-pruebas/data") -> Path | None:
+    """
+    Muestra un menú numerado con los CSVs disponibles.
+    El usuario ingresa un número para elegir, o 0 para salir.
+    Acepta también un número pasado por argumento de línea de comandos.
+    """
+    csvs = _listar_csvs(data_dir)
+    if not csvs:
+        return None
+
+    print("\n" + "─" * 55)
+    print("  CSVs disponibles:")
+    print("─" * 55)
+    for i, csv in enumerate(csvs, start=1):
+        print(f"  [{i:2d}]  {csv.name}")
+    print("─" * 55)
+
+    # Si se pasó un número como argumento de línea de comandos, usarlo directo
+    if len(sys.argv) > 1:
+        raw = sys.argv[1]
+    else:
+        raw = input("  Ingresá el número del CSV (0 para salir): ").strip()
+
+    if raw == "0" or raw == "":
+        return None
+
+    try:
+        idx = int(raw)
+        if 1 <= idx <= len(csvs):
+            return csvs[idx - 1]
+        else:
+            print(f"  ❌ Número fuera de rango (1-{len(csvs)})")
+            return None
+    except ValueError:
+        print(f"  ❌ '{raw}' no es un número válido")
+        return None
+
+
 # ── Demo ──────────────────────────────────────────────────────────────────────
- 
+
 def _run_demo():
-    csv_path = Path("data/cow_014_subclinica_progresando.csv") # Asegurate de que esta ruta sea correcta
-    if not csv_path.exists():
-        print(f"❌ {csv_path} no encontrado.")
+    csv_path = _seleccionar_csv()
+    if csv_path is None:
+        print("  Saliendo.")
         return
- 
+
+    print(f"\n  📂 Cargando: {csv_path.name}")
+
     predictor = MastitisPredictor()
     df        = pd.read_csv(csv_path, parse_dates=["timestamp"])
- 
+
     sample_animals = df["animal_id"].unique()[:5]
- 
-    print("\n" + "═"*65)
+
+    print("\n" + "═" * 65)
     print("  DEMO: Predicciones sobre animales del dataset sintético")
-    print("═"*65)
- 
+    print("═" * 65)
+
     for animal_id in sample_animals:
         animal_df  = df[df["animal_id"] == animal_id].sort_values("timestamp")
-        real_label = animal_df["label"].iloc[-1]
+        real_label = animal_df["label"].iloc[-1] if "label" in animal_df.columns else "desconocido"
         result     = predictor.predict(animal_df)
-        alert_icon = "🚨" if result["alert"] else "✅"
- 
-        print(f"\n  Animal #{animal_id}  |  Real: {real_label:12s}  |  "
-              f"Pred: {result['label']:12s}  {alert_icon}")
-        print(f"    Confianza : {result['confidence']:.1%}")
-        
-        # MODIFICADO: Uso .get() en el print para evitar KeyError si la clase 
-        # en tu dataset se llama "sub_clinica" en vez de "subclinica"
-        print(f"    Probas    : sana={result['proba'].get('sana', 0):.3f}  "
-              f"sub_clínica={result['proba'].get('sub_clinica', 0):.3f}  "
-              f"clínica={result['proba'].get('clinica', 0):.3f}")
- 
-    print("\n" + "═"*65)
+        _print_result(animal_id, real_label, result)
+
+    print("\n" + "═" * 65)
     print("\n  DEMO BATCH: todos los animales...")
-    batch = predictor.predict_batch(df)
-    
-    # Manejo de casos donde alert es None (por ValueError)
+    batch  = predictor.predict_batch(df)
     alerts = batch[batch["alert"] == True]
-    
+
     print(f"  Analizados : {len(batch)}")
     print(f"  Alertas    : {len(alerts)}")
     print("\n  Distribución predicha:")
     for label, cnt in batch["label"].value_counts().items():
-        print(f"    {label:12s}: {cnt}")
- 
- 
+        print(f"    {label:15s}: {cnt}")
+
+
 if __name__ == "__main__":
     _run_demo()
