@@ -12,6 +12,7 @@ import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
 import { CowStatus } from "@/types"
 import { generateBiometricData } from "@/lib/mock-data"
+import CowHealthViewer, { SingleCowViewer, mapBackendStatusTo3D } from "@/lib/CowHealthViewer"
 
 function getStressLevel(rmssd: number, sdnn: number) {
   if (rmssd === 0 && sdnn === 0) return { value: "N/A", status: "normal" as const }
@@ -123,6 +124,7 @@ export default function AnimalDetail() {
         description={`Registrada hace: ${formatTimeInSystem(animal.registrationDate)} | Ultima Act: ${animal.lastUpdated}`}
       />
 
+
       <div className="p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
         <Button
           variant="ghost"
@@ -147,7 +149,9 @@ export default function AnimalDetail() {
         <section>
           <BiometricCards biometrics={biometrics} />
         </section>
-
+        <div>
+          <SingleCowViewer status={mapBackendStatusTo3D(prediction?.status)} />
+        </div>
         <section className="mt-2">
           <BiometricChart
             data={displayChartData}
@@ -155,7 +159,6 @@ export default function AnimalDetail() {
             normalRange={[38.0, 39.2]}
           />
         </section>
-
         <section className="mt-4">
           <DiagnosisPanel
             status={effectiveLabel as CowStatus}
