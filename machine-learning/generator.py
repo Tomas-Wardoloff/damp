@@ -261,16 +261,19 @@ print(df.groupby("label")[cols].mean().round(2).to_string())
 # GUARDAR
 # ─────────────────────────────────────────────
 out = Path(__file__).resolve().parent
-path_full   = out / "damp_data_temporal.csv"
-path_sample = out / "damp_sample_temporal.csv"
+path_full   = out / "data/damp_data_temporal.csv"
+path_sample = out / "data/damp_sample_temporal.csv"
 
+Path(path_full).parent.mkdir(parents=True, exist_ok=True)
 df.to_csv(path_full, index=False)
+Path(path_sample).parent.mkdir(parents=True, exist_ok=True)
 df.sample(200, random_state=42).sort_values("timestamp").to_csv(path_sample, index=False)
 
 # BOV_018 es clínica — tiene la progresión más completa
 # sana → subclinica → clinica en 48hs, ideal para testear el modelo
-path_test = out / "damp_data_test.csv"
+path_test = out / "data/damp_data_test.csv"
 vaca_test = df[df.animal_id == "BOV_018"].copy()
+Path(path_test).parent.mkdir(parents=True, exist_ok=True)
 vaca_test.to_csv(path_test, index=False)
 
 print(f"\n✓ Dataset completo  → {path_full}")
