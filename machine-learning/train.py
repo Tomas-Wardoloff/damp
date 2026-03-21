@@ -33,7 +33,6 @@ BOOL_FEATURES = ["hubo_rumia", "hubo_vocalizacion"]
 
 LABEL_COLORS = {
     "sana":        "#2ecc71",
-    "sub_clinica": "#f39c12",
     "mastitis":    "#e74c3c",
     "celo":        "#9b59b6",
     "febril":      "#e67e22",
