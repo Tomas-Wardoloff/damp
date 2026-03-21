@@ -8,6 +8,7 @@ from app.modules.cow.routes import router as cow_router
 from app.modules.health.scheduler import HealthCheckScheduler
 from app.modules.health.routes import router as health_router
 from app.modules.reading.routes import router as reading_router
+from app.modules.seed.routes import router as seed_router
 
 app = FastAPI(title=settings.app_name, debug=settings.app_debug)
 app.state.health_scheduler = HealthCheckScheduler()
@@ -46,3 +47,4 @@ app.include_router(cow_router)
 app.include_router(collar_router)
 app.include_router(reading_router)
 app.include_router(health_router)
+app.include_router(seed_router)
