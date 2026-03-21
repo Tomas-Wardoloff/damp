@@ -57,7 +57,7 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus, healthHistory } = data
+  const { animal, chartData, healthStatus, healthHistory, prediction } = data
 
   function formatTimeInSystem(dateString: string) {
     if (!dateString) return "Desconocido";
@@ -76,6 +76,9 @@ export default function AnimalDetail() {
     return { value: "Normal", status: "normal" as const };
   }
 
+  const isCritical = animal.status === "critical"
+  const biometricsStatus = isCritical ? ("critical" as const) : animal.status === "warning" ? ("warning" as const) : ("normal" as const)
+
   const biometrics = {
     temperature: { value: animal.temperature, status: biometricsStatus },
     heartRate: { value: animal.heartRate, status: biometricsStatus },
@@ -84,21 +87,37 @@ export default function AnimalDetail() {
   }
 
   // If backend returned less than 2 data points, we can't draw a line very well. Use fake history if needed.
-  const displayChartData = chartData.length > 1 ? chartData : generateBiometricData()
+  const displayChartData = chartData.length > 0 ? chartData : []
 
-  // AI Diagnosis Logic default fallbacks if API doesn't provide nice strings
-  let conditionStr = "Parámetros estables. Funciones biológicas dentro de los márgenes previstos."
-  let confPercent = 94
-  let recomStr = "Mantener monitoreo pasivo. No requiere intervención inmediata."
+  // AI Diagnosis Logic with new model payload format (primary + secondary)
+  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "SANA"
+  const primaryConf = prediction?.primary?.confidence ?? healthStatus?.primary_confidence ?? healthStatus?.confidence ?? 0
+  const secondaryLabel = prediction?.secondary?.status || healthStatus?.secondary_status || null
+  const secondaryConf = prediction?.secondary?.confidence ?? healthStatus?.secondary_confidence ?? null
 
-  if (isCritical) {
-    conditionStr = healthStatus?.condition || "Alerta Roja. Probabilidad alta de Mastitis Clínica."
-    confPercent = healthStatus?.confidence || 87
-    recomStr = healthStatus?.recommendation || "Contactar veterinario. Identificar cuarto mamario afectado e iniciar protocolo de aislamiento."
-  } else if (animal.status === "warning") {
-    conditionStr = healthStatus?.condition || "Anomalía leve detectada. Posible estrés térmico o pre-clínico."
-    confPercent = healthStatus?.confidence || 76
-    recomStr = healthStatus?.recommendation || "Elevar prioridad de observación durante el ordeñe. Verificar ingesta de agua."
+  let effectiveLabel = primaryLabel
+  let effectiveConf = primaryConf
+  if (secondaryLabel && secondaryConf !== null && secondaryConf > effectiveConf) {
+    effectiveLabel = secondaryLabel
+    effectiveConf = secondaryConf
+  }
+
+  const labelLower = String(effectiveLabel).toLowerCase()
+
+  let conditionStr = `Predicción principal: ${effectiveLabel}`
+  if (secondaryLabel) {
+    conditionStr += ` | secundaria: ${secondaryLabel}`
+  }
+
+  const confPercent = Math.round((effectiveConf || 0) * 100)
+  let recomStr = "Mantener monitoreo y seguir el protocolo de rutina."
+
+  if (labelLower.includes("mastitis") || labelLower.includes("clinica")) {
+    recomStr = "Prioridad alta: revisión veterinaria y chequeo de ubre inmediato."
+  } else if (labelLower.includes("subclinica") || labelLower.includes("febril") || labelLower.includes("digestivo")) {
+    recomStr = "Monitoreo intensivo: repetir control y confirmar evolución en próximas horas."
+  } else if (labelLower.includes("celo")) {
+    recomStr = "Evento reproductivo detectado: confirmar con observación de conducta."
   }
 
   return (

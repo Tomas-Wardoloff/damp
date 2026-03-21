@@ -10,6 +10,10 @@ export type HerdMapPoint = {
   healthStatus: string | null;
   confidence: number | null;
   healthCreatedAt: string | null;
+  primaryStatus: string | null;
+  primaryConfidence: number | null;
+  secondaryStatus: string | null;
+  secondaryConfidence: number | null;
 };
 
 interface HerdGeoMapClientProps {
@@ -84,6 +88,14 @@ export function HerdGeoMapClient({ points }: HerdGeoMapClientProps) {
                   {point.confidence === null
                     ? "N/A"
                     : `${(point.confidence * 100).toFixed(1)}%`}
+                </div>
+                <div>
+                  Primario: {point.primaryStatus || "N/A"}
+                  {point.primaryConfidence === null ? "" : ` (${(point.primaryConfidence * 100).toFixed(1)}%)`}
+                </div>
+                <div>
+                  Secundario: {point.secondaryStatus || "N/A"}
+                  {point.secondaryConfidence === null ? "" : ` (${(point.secondaryConfidence * 100).toFixed(1)}%)`}
                 </div>
                 <div>
                   Ult. prediccion:{" "}

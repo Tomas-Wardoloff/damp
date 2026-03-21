@@ -54,7 +54,15 @@ export default function MapaRodeoPage() {
 
       const healthMap = new Map<
         number,
-        { status: string | null; confidence: number | null; createdAt: string | null }
+        {
+          effectiveStatus: string | null;
+          effectiveConfidence: number | null;
+          primaryStatus: string | null;
+          primaryConfidence: number | null;
+          secondaryStatus: string | null;
+          secondaryConfidence: number | null;
+          createdAt: string | null;
+        }
       >();
       const chunkSize = 8;
 
@@ -63,13 +71,38 @@ export default function MapaRodeoPage() {
         const chunkResults = await Promise.all(
           chunk.map(async (cowId) => {
             const latestHealth = await getLatestHealthByHistory(cowId);
+            const primaryStatus = latestHealth?.primary_status || latestHealth?.status || null;
+            const primaryConfidence =
+              typeof latestHealth?.primary_confidence === "number"
+                ? latestHealth.primary_confidence
+                : typeof latestHealth?.confidence === "number"
+                  ? latestHealth.confidence
+                  : null;
+            const secondaryStatus = latestHealth?.secondary_status || null;
+            const secondaryConfidence =
+              typeof latestHealth?.secondary_confidence === "number"
+                ? latestHealth.secondary_confidence
+                : null;
+
+            let effectiveStatus = primaryStatus;
+            let effectiveConfidence = primaryConfidence;
+            if (
+              secondaryStatus &&
+              secondaryConfidence !== null &&
+              (primaryConfidence === null || secondaryConfidence > primaryConfidence)
+            ) {
+              effectiveStatus = secondaryStatus;
+              effectiveConfidence = secondaryConfidence;
+            }
+
             return {
               cowId,
-              status: latestHealth?.status || null,
-              confidence:
-                typeof latestHealth?.confidence === "number"
-                  ? latestHealth.confidence
-                  : null,
+              effectiveStatus,
+              effectiveConfidence,
+              primaryStatus,
+              primaryConfidence,
+              secondaryStatus,
+              secondaryConfidence,
               createdAt: latestHealth?.created_at || null,
             };
           }),
@@ -77,8 +110,12 @@ export default function MapaRodeoPage() {
 
         chunkResults.forEach((item) => {
           healthMap.set(item.cowId, {
-            status: item.status,
-            confidence: item.confidence,
+            effectiveStatus: item.effectiveStatus,
+            effectiveConfidence: item.effectiveConfidence,
+            primaryStatus: item.primaryStatus,
+            primaryConfidence: item.primaryConfidence,
+            secondaryStatus: item.secondaryStatus,
+            secondaryConfidence: item.secondaryConfidence,
             createdAt: item.createdAt,
           });
         });
@@ -101,9 +138,13 @@ export default function MapaRodeoPage() {
             lat,
             lng,
             timestamp: String(reading.timestamp),
-            healthStatus: health?.status || null,
-            confidence: health?.confidence ?? null,
+            healthStatus: health?.effectiveStatus || null,
+            confidence: health?.effectiveConfidence ?? null,
             healthCreatedAt: health?.createdAt ?? null,
+            primaryStatus: health?.primaryStatus ?? null,
+            primaryConfidence: health?.primaryConfidence ?? null,
+            secondaryStatus: health?.secondaryStatus ?? null,
+            secondaryConfidence: health?.secondaryConfidence ?? null,
           };
         })
         .filter((point): point is HerdMapPoint => point !== null);

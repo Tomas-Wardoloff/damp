@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.integrations.ai_client import AIClient
-from app.modules.cow.models import Cow
+from app.modules.collar.models import Collar
 from app.modules.health.models import HealthAnalysis, HealthSchedulerConfig
 from app.modules.health.service import HealthService
 
@@ -21,6 +21,7 @@ class HealthCheckScheduler:
         self._stop_event = asyncio.Event()
         self._last_execution_at: datetime | None = None
         self._current_per_cow_seconds: int | None = None
+        self._eligible_cows_count: int = 0
 
     @property
     def running(self) -> bool:
@@ -33,6 +34,10 @@ class HealthCheckScheduler:
     @property
     def current_per_cow_seconds(self) -> int | None:
         return self._current_per_cow_seconds
+
+    @property
+    def eligible_cows_count(self) -> int:
+        return self._eligible_cows_count
 
     async def start(self) -> None:
         if self.running:
@@ -71,15 +76,17 @@ class HealthCheckScheduler:
             config = _get_or_create_config(db)
             if not config.enabled:
                 self._current_per_cow_seconds = None
+                self._eligible_cows_count = 0
                 return 5
 
-            cow_ids = list(db.scalars(select(Cow.id).order_by(Cow.id.asc())).all())
-            if not cow_ids:
+            assigned_cow_ids = _assigned_cow_ids(db)
+            self._eligible_cows_count = len(assigned_cow_ids)
+            if not assigned_cow_ids:
                 self._current_per_cow_seconds = None
                 return 5
 
             cycle_seconds = max(60, config.cycle_minutes * 60)
-            per_cow_seconds = max(1, cycle_seconds // len(cow_ids))
+            per_cow_seconds = max(1, cycle_seconds // len(assigned_cow_ids))
             self._current_per_cow_seconds = per_cow_seconds
 
             now = datetime.utcnow()
@@ -88,7 +95,7 @@ class HealthCheckScheduler:
                 if elapsed < per_cow_seconds:
                     return max(1, per_cow_seconds - elapsed)
 
-            ordered_candidates = _ordered_cow_ids_by_oldest_health(db)
+            ordered_candidates = _ordered_assigned_cow_ids_by_oldest_health(db, assigned_cow_ids)
             service = HealthService(db=db, ai_client=AIClient())
 
             for cow_id in ordered_candidates:
@@ -126,19 +133,36 @@ def _get_or_create_config(db) -> HealthSchedulerConfig:
     return config
 
 
-def _ordered_cow_ids_by_oldest_health(db) -> list[int]:
-    latest_health_subquery = (
+def _assigned_cow_ids(db) -> list[int]:
+    stmt = (
+        select(Collar.assigned_cow_id)
+        .where(Collar.assigned_cow_id.is_not(None))
+        .group_by(Collar.assigned_cow_id)
+        .order_by(Collar.assigned_cow_id.asc())
+    )
+    return [cow_id for cow_id in db.scalars(stmt).all() if cow_id is not None]
+
+
+def _ordered_assigned_cow_ids_by_oldest_health(db, assigned_cow_ids: list[int]) -> list[int]:
+    if not assigned_cow_ids:
+        return []
+
+    latest_by_cow_stmt = (
         select(
-            HealthAnalysis.cow_id.label("cow_id"),
+            HealthAnalysis.cow_id,
             func.max(HealthAnalysis.created_at).label("latest_at"),
         )
+        .where(HealthAnalysis.cow_id.in_(assigned_cow_ids))
         .group_by(HealthAnalysis.cow_id)
-        .subquery()
     )
+    latest_by_cow_rows = db.execute(latest_by_cow_stmt).all()
+    latest_by_cow = {int(row.cow_id): row.latest_at for row in latest_by_cow_rows}
 
-    stmt = (
-        select(Cow.id)
-        .outerjoin(latest_health_subquery, latest_health_subquery.c.cow_id == Cow.id)
-        .order_by(latest_health_subquery.c.latest_at.asc().nullsfirst(), Cow.id.asc())
+    return sorted(
+        assigned_cow_ids,
+        key=lambda cow_id: (
+            latest_by_cow.get(cow_id) is not None,
+            latest_by_cow.get(cow_id) or datetime.min,
+            cow_id,
+        ),
     )
-    return list(db.scalars(stmt).all())

@@ -103,4 +103,5 @@ def get_scheduler_runtime(request: Request) -> HealthSchedulerRuntimeResponse:
         running=scheduler.running,
         last_execution_at=scheduler.last_execution_at,
         current_per_cow_seconds=scheduler.current_per_cow_seconds,
+        eligible_cows_count=scheduler.eligible_cows_count,
     )
