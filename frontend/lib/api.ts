@@ -213,7 +213,6 @@ export async function fetchDashboardData(): Promise<{
   // too many concurrent connections (browser connection limit / local server socket exhaustion).
   const animals: Animal[] = [];
   const chunkSize = 5;
-  const allCowsArray = Array.from(allCowIds);
 
   for (let i = 0; i < latestReadings.length; i += chunkSize) {
     const chunk = latestReadings.slice(i, i + chunkSize);
@@ -226,7 +225,7 @@ export async function fetchDashboardData(): Promise<{
 
         return {
           id: String(cowId),
-          breed: cow.breed || "Mestiza",
+          breed: cowMap.get(cowId) || "Mestiza",
           status: toFrontendStatus(prediction.status),
           temperature: reading?.temperatura_corporal_prom ?? 38.5,
           heartRate: reading?.frec_cardiaca_prom ? Math.round(reading.frec_cardiaca_prom) : 70,

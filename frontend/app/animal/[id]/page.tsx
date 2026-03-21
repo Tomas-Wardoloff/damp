@@ -11,8 +11,24 @@ import { StatusBadge } from "@/components/ui/StatusBadge"
 import { fetchAnimalDetail } from "@/lib/api"
 import { Button } from "@/components/ui/Button"
 import { CowStatus } from "@/types"
-// Keep mock generator just for filling chart if DB has no historical data yet
 import { generateBiometricData } from "@/lib/mock-data"
+
+function getStressLevel(rmssd: number, sdnn: number) {
+  if (rmssd === 0 && sdnn === 0) return { value: "N/A", status: "normal" as const }
+  if (rmssd < 20 || sdnn < 30) return { value: "Alto", status: "high" as const }
+  if (rmssd < 40 || sdnn < 50) return { value: "Moderado", status: "warning" as const }
+  return { value: "Bajo", status: "normal" as const }
+}
+
+function formatTimeInSystem(dateStr: string) {
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMonths = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth());
+  if (diffMonths === 0) return "Menos de 1 mes";
+  if (diffMonths === 1) return "1 mes";
+  return `${diffMonths} meses`;
+}
 
 export default function AnimalDetail() {
   const router = useRouter()
@@ -58,12 +74,7 @@ export default function AnimalDetail() {
     )
   }
 
-  const { animal, chartData, healthStatus } = data
-  const isCritical = animal.status === "critical"
-  const biometricsStatus = isCritical ? "high" as const : "normal" as const
-
-  const isCritical = animal.status === "critical"
-  const biometricsStatus = isCritical ? ("critical" as const) : animal.status === "warning" ? ("warning" as const) : ("normal" as const)
+  const { animal, chartData, healthStatus, prediction } = data
 
   const biometrics = {
     temperature: {
@@ -93,7 +104,7 @@ export default function AnimalDetail() {
   const displayChartData = chartData.length > 0 ? chartData : []
 
   // AI Diagnosis Logic with new model payload format (primary + secondary)
-  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "SANA"
+  const primaryLabel = prediction?.primary?.status || healthStatus?.primary_status || "HEALTHY"
   const primaryConf = prediction?.primary?.confidence ?? healthStatus?.primary_confidence ?? healthStatus?.confidence ?? 0
   const secondaryLabel = prediction?.secondary?.status || healthStatus?.secondary_status || null
   const secondaryConf = prediction?.secondary?.confidence ?? healthStatus?.secondary_confidence ?? null
@@ -103,24 +114,6 @@ export default function AnimalDetail() {
   if (secondaryLabel && secondaryConf !== null && secondaryConf > effectiveConf) {
     effectiveLabel = secondaryLabel
     effectiveConf = secondaryConf
-  }
-
-  const labelLower = String(effectiveLabel).toLowerCase()
-
-  let conditionStr = `Predicción principal: ${effectiveLabel}`
-  if (secondaryLabel) {
-    conditionStr += ` | secundaria: ${secondaryLabel}`
-  }
-
-  const confPercent = Math.round((effectiveConf || 0) * 100)
-  let recomStr = "Mantener monitoreo y seguir el protocolo de rutina."
-
-  if (labelLower.includes("mastitis") || labelLower.includes("clinica")) {
-    recomStr = "Prioridad alta: revisión veterinaria y chequeo de ubre inmediato."
-  } else if (labelLower.includes("subclinica") || labelLower.includes("febril") || labelLower.includes("digestivo")) {
-    recomStr = "Monitoreo intensivo: repetir control y confirmar evolución en próximas horas."
-  } else if (labelLower.includes("celo")) {
-    recomStr = "Evento reproductivo detectado: confirmar con observación de conducta."
   }
 
   return (
@@ -165,9 +158,8 @@ export default function AnimalDetail() {
 
         <section className="mt-4">
           <DiagnosisPanel
-            condition={conditionStr}
-            confidence={confPercent}
-            recommendation={recomStr}
+            status={effectiveLabel as CowStatus}
+            confidence={effectiveConf}
           />
         </section>
       </div>
