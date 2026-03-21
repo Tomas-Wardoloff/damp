@@ -9,6 +9,7 @@ class HealthAnalysisResponse(BaseModel):
     id: int
     cow_id: int
     status: HealthStatus
+    confidence: float | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

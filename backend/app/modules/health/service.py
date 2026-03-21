@@ -43,23 +43,29 @@ class HealthService:
         readings_for_model = [self._serialize_reading(r) for r in reversed(readings)]
 
         try:
-            status_value = await self.ai_client.predict(cow_id=cow_id, readings=readings_for_model)
-        except httpx.HTTPError as exc:
+            prediction = await self.ai_client.predict(cow_id=cow_id, readings=readings_for_model)
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
             logger.exception("AI service request failed for cow_id=%s", cow_id)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="AI service unavailable or returned an invalid response",
             ) from exc
 
-        analysis = HealthAnalysis(cow_id=cow_id, status=status_value)
+        analysis = HealthAnalysis(
+            cow_id=cow_id,
+            status=prediction.status,
+            confidence=prediction.confidence,
+        )
         self.db.add(analysis)
         self.db.commit()
         self.db.refresh(analysis)
 
-        if status_value == HealthStatus.CLINICA:
-            logger.critical("CRITICAL ALERT cow_id=%s status=%s", cow_id, status_value)
-        elif status_value == HealthStatus.SUBCLINICA:
-            logger.warning("WARNING ALERT cow_id=%s status=%s", cow_id, status_value)
+        if prediction.status in {HealthStatus.CLINICA, HealthStatus.MASTITIS}:
+            logger.critical("CRITICAL ALERT cow_id=%s status=%s", cow_id, prediction.status)
+        elif prediction.status in {HealthStatus.SUBCLINICA, HealthStatus.FEBRIL, HealthStatus.DIGESTIVO}:
+            logger.warning("WARNING ALERT cow_id=%s status=%s", cow_id, prediction.status)
+        elif prediction.status == HealthStatus.CELO:
+            logger.info("EVENT cow_id=%s status=%s", cow_id, prediction.status)
 
         return analysis
 
