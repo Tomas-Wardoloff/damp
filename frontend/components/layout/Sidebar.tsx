@@ -15,6 +15,7 @@ import {
   Activity,
   User
 } from "lucide-react"
+import { Button } from "@/components/ui/Button"
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = React.useState(true)
@@ -34,12 +35,14 @@ export function Sidebar() {
         isCollapsed ? "w-20" : "w-64"
       )}
     >
-      <button
+      <Button
+        variant="iconToggle"
+        size="icon"
         onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute -right-3 top-6 bg-surface-container border border-outline-variant rounded-full p-1 text-on-surface hover:text-primary transition-colors z-30 shadow-ambient"
+        className="absolute -right-3 top-6 z-30"
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-      </button>
+      </Button>
 
       {/* Logo Area */}
       <div className="h-18 flex items-center justify-center border-b border-outline-variant/30 px-4">
@@ -86,19 +89,23 @@ export function Sidebar() {
 
       {/* Footer Actions */}
       <div className="p-3 border-t border-outline-variant/30 flex flex-col gap-2">
-        <button
+        <Button
+          variant="ghost"
+          size="none"
           title={isCollapsed ? "Soporte" : undefined}
-          className="flex items-center gap-3 px-3 py-3 rounded-md text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-all group w-full"
+          className="px-3 py-3 gap-3 group w-full justify-start mt-auto"
         >
           <LifeBuoy className="w-5 h-5 shrink-0" />
           {!isCollapsed && (
             <span className="text-body-md whitespace-nowrap font-medium">Soporte</span>
           )}
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="ghost"
+          size="none"
           title={isCollapsed ? "Perfil de Usuario" : undefined}
-          className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-surface-container transition-all text-left mt-2 w-full"
+          className="gap-3 px-2 py-2 mt-2 w-full justify-start"
         >
           <div className="w-8 h-8 rounded-full bg-secondary outline-1 outline-offset-2 outline-secondary/30 shrink-0 overflow-hidden relative flex items-center justify-center">
             <User className="w-5 h-5 text-on-surface" />
@@ -108,7 +115,7 @@ export function Sidebar() {
               <span className="text-body-md font-medium text-on-surface leading-tight">user@email.com</span>
             </div>
           )}
-        </button>
+        </Button>
       </div>
     </aside>
   )

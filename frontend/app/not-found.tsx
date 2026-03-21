@@ -1,4 +1,4 @@
-import Link from "next/link"
+import { Button } from "@/components/ui/Button"
 
 export default function NotFound() {
   return (
@@ -13,9 +13,9 @@ export default function NotFound() {
           La ruta que buscas está fuera de nuestro perímetro de monitoreo.
         </p>
 
-        <Link href="/" className="btn-primary mt-4 flex items-center justify-center transition-all hover:scale-105 active:scale-95">
+        <Button href="/" variant="primary" className="mt-4 hover:scale-[1.02] active:scale-[0.98]">
           Volver al Panel Principal
-        </Link>
+        </Button>
       </div>
 
       <div className="fixed bottom-10 left-10 text-label-sm font-mono text-outline/40">
