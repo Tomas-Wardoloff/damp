@@ -61,12 +61,15 @@ export function MetricCard({ title, value, subtitle, status = "neutral", classNa
         </p>
       </div>
 
-      {/* Subtle glow effect for critical / warning purely as a vibe */}
+      {/* Subtle glow effect purely as a vibe */}
       {status === 'critical' && (
         <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-tertiary/20 blur-[32px] rounded-full pointer-events-none" />
       )}
       {status === 'warning' && (
         <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-secondary/15 blur-[32px] rounded-full pointer-events-none" />
+      )}
+      {status === 'healthy' && (
+        <div className="absolute -bottom-6 -right-6 w-32 h-32 bg-primary/10 blur-[32px] rounded-full pointer-events-none" />
       )}
     </div>
   )
