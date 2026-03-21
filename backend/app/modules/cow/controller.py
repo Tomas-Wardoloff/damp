@@ -19,3 +19,6 @@ class CowController:
         if cow is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cow not found")
         return cow
+
+    def get_summary(self):
+        return self.service.get_summary()
