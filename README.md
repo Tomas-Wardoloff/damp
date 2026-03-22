@@ -1,6 +1,31 @@
 # damp
-## Arquitectura
-<img width="1440" height="2304" alt="image" src="https://github.com/user-attachments/assets/8d5c8980-33eb-46e3-8e01-98f25d30a956" />
+## Arquitectura del Proyecto
+
+El proyecto está diseñado como una plataforma integral de monitoreo de salud animal, compuesta por tres servicios principales que interactúan entre sí:
+
+### 1. Frontend (Next.js)
+Ubicado en [frontend/](frontend/), es la interfaz de usuario moderna construida con **Next.js 16**, **React 19** y **Tailwind CSS**.
+- **Visualización de Datos:** Gráficos dinámicos con **Recharts** para métricas biométricas.
+- **Geolocalización:** Mapas interactivos con **Leaflet** para el seguimiento en tiempo real del ganado.
+- **Dashboard:** Panel central con métricas resumen y alertas de salud.
+
+### 2. Backend (FastAPI)
+Ubicado en [backend/](backend/), actúa como el núcleo de lógica de negocios y gestión de datos.
+- **Framework:** **FastAPI** para una API REST de alto rendimiento.
+- **Persistencia:** **PostgreSQL** gestionado a través de **SQLAlchemy ORM** y migraciones de base de datos con **Alembic**.
+- **Módulos:** Arquitectura modular que separa responsabilidades en `cow` (ganado), `collar` (sensores), `reading` (lecturas biométricas) y `health` (salud).
+- **Integración AI:** Conecta con el servicio de ML para obtener diagnósticos de salud automáticos.
+
+### 3. Machine Learning (FastAPI + SciKit-Learn)
+Ubicado en [machine-learning/](machine-learning/), es el servicio especializado en análisis predictivo.
+- **Predicción:** Servicio que expone un modelo entrenado para la detección de mastitis y otras condiciones de salud basándose en las lecturas de los collares.
+- **Generación de Datos:** Incluye scripts para la simulación de historias de vida y generación de datasets sintéticos de prueba.
+
+## Flujo de Datos
+1. Los **Collares** envían lecturas biométricas al **Backend**.
+2. El **Backend** persiste los datos en **PostgreSQL**.
+3. El **Backend** solicita una predicción al servicio de **Machine Learning**.
+4. El **Frontend** consume la API del Backend para mostrar el estado de salud, alertas y mapas al usuario final.
 
 ## API (FastAPI)
 
