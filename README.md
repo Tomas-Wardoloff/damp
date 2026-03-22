@@ -1,85 +1,89 @@
 # DAMP
 
-[![Acceder al Aplicativo](https://img.shields.io/badge/Acceder_al_Aplicativo-Vercel-black?style=for-the-badge&logo=vercel)](https://damp-front.vercel.app/)
+[![Access the Application](https://img.shields.io/badge/Access_the_Application-Vercel-black?style=for-the-badge&logo=vercel)](https://damp-front.vercel.app/)
 
-## Introducción
-**DAMP (Distributed Animal Monitoring Platform)** es una plataforma avanzada de monitoreo biométrico diseñada para el sector ganadero. Utiliza sensores de alta frecuencia (collares inteligentes) y modelos de Machine Learning para detectar enfermedades y cambios fisiológicos.
+## Demo
+Watch the project demo on YouTube:
+[https://youtu.be/TafMqvO5Wco](https://youtu.be/TafMqvO5Wco)
+
+## Introduction
+**DAMP (Distributed Animal Monitoring Platform)** is an advanced biometric monitoring platform designed for the livestock sector. It uses high-frequency sensors (smart collars) and Machine Learning models to detect diseases and physiological changes.
 
 ---
 
-## Arquitectura del Proyecto
+## Project Architecture
 
-El proyecto está diseñado como una plataforma integral de monitoreo de salud animal, compuesta por tres servicios principales que interactúan entre sí:
+The project is designed as a comprehensive animal health monitoring platform, consisting of three main services that interact with each other:
 
 ### 1. Frontend (Next.js)
-Ubicado en [frontend/](frontend/), es la interfaz de usuario moderna construida con **Next.js 16**, **React 19** y **Tailwind CSS**.
-- **Visualización de Datos:** Gráficos dinámicos con **Recharts** para métricas biométricas.
-- **Geolocalización:** Mapas interactivos con **Leaflet** para el seguimiento en tiempo real del ganado.
-- **Dashboard:** Panel central con métricas resumen y alertas de salud.
+Located in [frontend/](frontend/), it is the modern user interface built with **Next.js 16**, **React 19**, and **Tailwind CSS**.
+- **Data Visualization:** Dynamic charts with **Recharts** for biometric metrics.
+- **Geolocation:** Interactive maps with **Leaflet** for real-time livestock tracking.
+- **Dashboard:** Central panel with summary metrics and health alerts.
 
 ### 2. Backend (FastAPI)
-Ubicado en [backend/](backend/), actúa como el núcleo de lógica de negocios y gestión de datos.
-- **Framework:** **FastAPI** para una API REST de alto rendimiento.
-- **Persistencia:** **PostgreSQL** gestionado a través de **SQLAlchemy ORM** y migraciones de base de datos con **Alembic**.
-- **Módulos:** Arquitectura modular que separa responsabilidades en `cow` (ganado), `collar` (sensores), `reading` (lecturas biométricas) y `health` (salud).
-- **Integración AI:** Conecta con el servicio de ML para obtener diagnósticos de salud automáticos.
+Located in [backend/](backend/), it acts as the core of business logic and data management.
+- **Framework:** **FastAPI** for a high-performance REST API.
+- **Persistence:** **PostgreSQL** managed through **SQLAlchemy ORM** and database migrations with **Alembic**.
+- **Modules:** Modular architecture that separates responsibilities into `cow` (livestock), `collar` (sensors), `reading` (biometric readings), and `health` (health).
+- **AI Integration:** Connects with the ML service to obtain automatic health diagnoses.
 
 ### 3. Machine Learning (FastAPI + SciKit-Learn)
-Ubicado en [machine-learning/](machine-learning/), es el servicio especializado en análisis predictivo.
-- **Predicción:** Servicio que expone un modelo entrenado para la detección de mastitis y otras condiciones de salud basándose en las lecturas de los collares.
-- **Generación de Datos:** Incluye scripts para la simulación de historias de vida y generación de datasets sintéticos de prueba.
+Located in [machine-learning/](machine-learning/), it is the service specialized in predictive analysis.
+- **Prediction:** Service that exposes a trained model for detecting mastitis and other health conditions based on collar readings.
+- **Data Generation:** Includes scripts for life story simulation and synthetic test dataset generation.
 
-## Estrategia de Datos y Funcionamiento Inicial
+## Data Strategy and Initial Operation
 
-Para que el sistema sea funcional desde el primer momento, el proyecto implementa una robusta estrategia de generación de datos sintéticos basada en investigación real:
+To ensure the system is functional from the start, the project implements a robust synthetic data generation strategy based on real research:
 
-1.  **Contexto del Problema y Sensores:** La infraestructura del proyecto está diseñada bajo la premisa de que **cada animal posee un collar con sensores multibiométricos** que envían datos de forma continua cada **5 minutos**. Ante la ausencia de un dataset público que cumpliera estrictamente con este requisito de alta frecuencia y diversidad de sensores, se optó por una sofisticada técnica de simulación.
-2.  **Premisas de Investigación:** La base científica y la obtención de los datos originales se detallan en el documento [Research.md](Research.md).
-3.  **Generación Sintética:** Partiendo de las premisas de investigación (como constantes fisiológicas de temperatura, frecuencia cardíaca y patrones de movimiento por estado de salud), se desarrolló un **Generador Vectorizado** en [backend/app/modules/seed/service.py](backend/app/modules/seed/service.py). Este generador utiliza **NumPy** para simular miles de lecturas biométricas con:
-    - Ciclos circadianos y variaciones térmicas.
-    - Ruido correlacionado entre sensores (simulación de fallas reales).
-    - Patrones específicos de salud (sana, mastitis, celo, febril, digestivo).
-3.  **Precarga de Históricos:** El sistema incluye un servicio de Seed que precarga la base de datos con:
-    - **Lecturas Biométricas (Readings):** Historial de 7 días para cada animal, indispensable para que los modelos de ML identifiquen tendencias.
-    - **Análisis de Salud:** Históricos de diagnósticos previos para poblar las gráficas de evolución.
+1.  **Problem Context and Sensors:** The project infrastructure is designed under the premise that **each animal has a collar with multi-biometric sensors** that send data continuously every **5 minutes**. Given the lack of a public dataset that strictly met this requirement for high frequency and sensor diversity, a sophisticated simulation technique was chosen.
+2.  **Research Premises:** The scientific basis and the collection of original data are detailed in the document [Research.md](Research.md).
+3.  **Synthetic Generation:** Based on research premises (such as physiological constants for temperature, heart rate, and movement patterns by health status), a **Vectorized Generator** was developed in [backend/app/modules/seed/service.py](backend/app/modules/seed/service.py). This generator uses **NumPy** to simulate thousands of biometric readings with:
+    - Circadian cycles and thermal variations.
+    - Correlated noise between sensors (simulating real failures).
+    - Specific health patterns (healthy, mastitis, heat, febrile, digestive).
+3.  **Pre-loading Historical Data:** The system includes a Seed service that pre-loads the database with:
+    - **Biometric Readings:** 7-day history for each animal, essential for ML models to identify trends.
+    - **Health Analysis:** History of previous diagnoses to populate evolution charts.
 
-Esta precarga asegura que al iniciar el producto, el usuario ya disponga de dashboards completos, mapas con trayectorias y modelos de IA capaces de realizar inferencias sobre datos pre-existentes.
+This pre-loading ensures that upon starting the product, the user already has full dashboards, maps with trajectories, and AI models capable of making inferences on pre-existing data.
 
-## Flujo de Datos
-1. Los **Collares** envían lecturas biométricas al **Backend**.
-2. El **Backend** persiste los datos en **PostgreSQL**.
-3. El **Backend** solicita una predicción al servicio de **Machine Learning**.
-4. El **Frontend** consume la API del Backend para mostrar el estado de salud, alertas y mapas al usuario final.
+## Data Flow
+1. **Collars** send biometric readings to the **Backend**.
+2. The **Backend** persists data in **PostgreSQL**.
+3. The **Backend** requests a prediction from the **Machine Learning** service.
+4. The **Frontend** consumes the Backend API to display health status, alerts, and maps to the end user.
 
 ## API (FastAPI)
 
-### Run dev (estilo JavaScript)
+### Run dev (JavaScript style)
 
-Usa un solo comando y el script hace todo:
+Use a single command and the script does everything:
 
 ```powershell
 .\run-dev.ps1
 ```
 
-Si prefieres correr todo con Python:
+If you prefer to run everything with Python:
 
 ```powershell
 python .\run-dev.py
 ```
 
-Si estas en CMD en lugar de PowerShell:
+If you are on CMD instead of PowerShell:
 
 ```cmd
 run-dev.cmd
 ```
 
-El script:
+The script:
 
-- Crea `.venv` si no existe
-- Instala dependencias de `requirements.txt`
-- Levanta el servidor con reload
+- Creates `.venv` if it doesn't exist
+- Installs dependencies from `requirements.txt`
+- Starts the server with reload
 
-### 1. Crear y activar entorno virtual
+### 1. Create and activate virtual environment
 
 Windows (PowerShell):
 
@@ -88,25 +92,25 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 2. Instalar dependencias
+### 2. Install dependencies
 
 ```powershell
 pip install -r requirements.txt
 ```
 
-### 3. Variables de entorno
+### 3. Environment variables
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-### 4. Levantar servidor con Uvicorn
+### 4. Start server with Uvicorn
 
 ```powershell
 uvicorn app.main:app --reload
 ```
 
-La API quedara disponible en:
+The API will be available at:
 
 - http://127.0.0.1:8000/
 - http://127.0.0.1:8000/docs

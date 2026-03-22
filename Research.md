@@ -1,46 +1,46 @@
 # Research & Data Acquisition
 
-# Referencias científicas — DAMP
-> Parámetros fisiológicos bovinos usados en el generador de datos sintéticos
+# Scientific References — DAMP
+> Bovine physiological parameters used in the synthetic data generator
 
 ---
 
-## Generación de Datos Sintéticos
+## Synthetic Data Generation
 
-Para asegurar un **funcionamiento inicial** robusto y permitir el entrenamiento de modelos de Machine Learning sin depender de una infraestructura de sensores física desplegada durante meses, hemos desarrollado un motor de simulación avanzada en el [SeedService](backend/app/modules/seed/service.py).
+To ensure robust **initial operation** and allow the training of Machine Learning models without relying on a physical sensor infrastructure deployed for months, we have developed an advanced simulation engine in the [SeedService](backend/app/modules/seed/service.py).
 
-### Metodología de Simulación
+### Simulation Methodology
 
-La generación de datos no es aleatoria, sino que sigue una arquitectura de simulación basada en tres pilares:
+Data generation is not random, but follows a simulation architecture based on three pillars:
 
-#### 1. Modelado Fisiológico (Vectores de Estado)
-Utilizamos una matriz de parámetros base (temperatura, frecuencia cardíaca, HRV, frecuencia ruminal) extraída de las referencias científicas anteriores. Cada estado de salud (`Sana`, `Mastitis`, `Celo`, `Febril`, `Digestivo`) actúa como un perfil que define:
-- **Media ($μ$):** Valor esperado para la métrica en ese estado.
-- **Desviación Estándar ($σ$):** Variabilidad natural del individuo.
+#### 1. Physiological Modeling (State Vectors)
+We use a matrix of base parameters (temperature, heart rate, HRV, rumination frequency) extracted from the previous scientific references. Each health status (`Healthy`, `Mastitis`, `Heat`, `Febrile`, `Digestive`) acts as a profile that defines:
+- **Mean ($μ$):** Expected value for the metric in that state.
+- **Standard Deviation ($σ$):** Natural variability of the individual.
 
-#### 2. Dinámicas Temporales y Ciclos Circadianos
-Para que los datos sean realistas temporalmente, el generador aplica:
-- **Variación Circadiana:** Modelamos la temperatura y actividad con picos en horas de pastoreo (7:00 y 17:00) y descensos nocturnos mediante funciones gaussianas.
-- **Transiciones de Estado:** Las "historias de vida" de las vacas simulan el progreso de una enfermedad (ej. una vaca que comienza sana, entra en cuadro febril y luego se recupera), permitiendo al modelo aprender la *tendencia* y no solo el valor puntual.
+#### 2. Temporal Dynamics and Circadian Cycles
+To make the data temporally realistic, the generator applies:
+- **Circadian Variation:** We model temperature and activity with peaks during grazing hours (7:00 and 17:00) and nocturnal decreases using Gaussian functions.
+- **State Transitions:** The "life stories" of the cows simulate the progress of a disease (e.g., a cow that starts healthy, enters a febrile state, and then recovers), allowing the model to learn the *trend* rather than just the point value.
 
-#### 3. Simulación de Errores y Ruido Real
-Para entrenar modelos resilientes, introducimos artificialmente:
-- **Ruido Correlacionado:** Simulación de interferencias ambientales que afectan a múltiples sensores simultáneamente.
-- **Fallas de Sensor (Outliers):** Probabilidad del ~0.8% de lecturas erráticas o nulas (dropouts) para forzar al modelo a manejar datos incompletos.
-- **Artefactos Cardíacos:** Picos de frecuencia cardíaca aleatorios que no corresponden a patologías, simulando movimientos bruscos o estrés momentáneo.
+#### 3. Simulation of Real Errors and Noise
+To train resilient models, we artificially introduce:
+- **Correlated Noise:** Simulation of environmental interference affecting multiple sensors simultaneously.
+- **Sensor Failures (Outliers):** Probabilty of ~0.8% of erratic or null readings (dropouts) to force the model to handle incomplete data.
+- **Cardiac Artifacts:** Random heart rate peaks that do not correspond to pathologies, simulating sudden movements or momentary stress.
 
-### Implementación Técnica
-El proceso se realiza de forma **vectorizada** utilizando **NumPy**, logrando generar historiales completos (ej. 21 vacas durante 7 días con lecturas cada 5 minutos) en menos de 5 segundos. Esta velocidad es crítica para entornos de desarrollo y pruebas de integración continua.
+### Technical Implementation
+The process is performed in a **vectorized** manner using **NumPy**, achieving the generation of full histories (e.g., 21 cows for 7 days with readings every 5 minutes) in less than 5 seconds. This speed is critical for development environments and continuous integration tests.
 
-### Análisis de Distribución de Features
-A continuación se presenta la distribución de las variables biométricas generadas según cada etiqueta de salud, validando que el motor de simulación respeta los rangos fisiológicos investigados:
+### Feature Distribution Analysis
+Below is the distribution of the generated biometric variables according to each health label, validating that the simulation engine respects the researched physiological ranges:
 
-![Distribución de Features por Label](machine-learning/output_exploration/distribucion_features_por_label.png)
+![Feature Distribution per Label](machine-learning/output_exploration/distribucion_features_por_label.png)
 
 ---
 
-## Temperatura corporal
-> `BASE = 38.6°C` · mastitis `+1.8°C` · febril `+1.7°C`
+## Body Temperature
+> `BASE = 38.6°C` · mastitis `+1.8°C` · febrile `+1.7°C`
 
 - Kim et al. (2019) — *Real-time temperature monitoring for early detection of mastitis*
   https://www.sciencedirect.com/science/article/abs/pii/S0168169918308494
@@ -50,16 +50,16 @@ A continuación se presenta la distribución de las variables biométricas gener
 
 ---
 
-## Frecuencia cardíaca
-> `BASE = 65 bpm` · mastitis `+24` · celo `+9` · rango normal 60–80 bpm en reposo
+## Heart Rate
+> `BASE = 65 bpm` · mastitis `+24` · heat `+9` · normal range 60–80 bpm at rest
 
 - PMC4546236 — *Heart Rate and HRV in Dairy Cows with Different Temperament*
   https://pmc.ncbi.nlm.nih.gov/articles/PMC4546236/
 
 ---
 
-## HRV — RMSSD y SDNN
-> `BASE rmssd = 40 ms` · mastitis `−26 ms` · digestivo `−14 ms` · SDNN = rmssd × 1.1–1.45
+## HRV — RMSSD and SDNN
+> `BASE rmssd = 40 ms` · mastitis `−26 ms` · digestive `−14 ms` · SDNN = rmssd × 1.1–1.45
 
 - MDPI Sensors (2018) — *Recording HRV of Dairy Cows to the Cloud*
   https://www.mdpi.com/1424-8220/18/8/2541
@@ -72,8 +72,8 @@ A continuación se presenta la distribución de las variables biométricas gener
 
 ---
 
-## Movimiento / velocidad — celo
-> celo `+2.8 m/s` · patrón nocturno gaussiano centrado en 23hs · mastitis `−1.1 m/s`
+## Movement / Speed — Heat
+> heat `+2.8 m/s` · nocturnal Gaussian pattern centered at 11:00 PM · mastitis `−1.1 m/s`
 
 - Cambridge Animal (2017) — *Behavioral signs of estrus and fully automated detection systems*
   https://www.cambridge.org/core/journals/animal/article/review-behavioral-signs-of-estrus-and-the-potential-of-fully-automated-systems-for-detection-of-estrus-in-dairy-cattle/0C4FCAEE6973AB21FC33C02C8403AC51
@@ -89,9 +89,9 @@ A continuación se presenta la distribución de las variables biométricas gener
 
 ---
 
-## Rumia
-> `BASE p_rumia = 0.52` · boost nocturno `+60%` · digestivo `−0.44` · mastitis `−0.42`
-> Vacas sanas rumiaron 7–8 horas/día, principalmente de noche
+## Rumination
+> `BASE p_rumia = 0.52` · nocturnal boost `+60%` · digestive `−0.44` · mastitis `−0.42`
+> Healthy cows ruminated 7–8 hours/day, mainly at night
 
 - PMC8547861 — *Using rumination time to manage health and reproduction in dairy cattle*
   https://pmc.ncbi.nlm.nih.gov/articles/PMC8547861/
@@ -104,15 +104,15 @@ A continuación se presenta la distribución de las variables biométricas gener
 
 ---
 
-## Ritmo circadiano
-> Función `circ(h)` con picos a las 7am y 17pm · temperatura `−0.25°C` de noche · HR `−7 bpm` de noche · velocidad `~15%` de la diurna
+## Circadian Rhythm
+> `circ(h)` function with peaks at 7:00 AM and 5:00 PM · temperature `−0.25°C` at night · HR `−7 bpm` at night · speed `~15%` of daytime
 
 - Frontiers in Animal Science (2022) — *Ultra- and Circadian Activity Rhythms of Dairy Cows in AMS*
   https://www.frontiersin.org/journals/animal-science/articles/10.3389/fanim.2022.839906/full
 
 ---
 
-## Sensores wearable — validación general del enfoque
+## Wearable Sensors — General Approach Validation
 
 - PMC8044875 — *Systematic Review: Validated Sensor Technologies for Welfare Assessment of Dairy Cattle*
   https://pmc.ncbi.nlm.nih.gov/articles/PMC8044875/
