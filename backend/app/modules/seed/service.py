@@ -6,7 +6,6 @@ Vacas: 21 — estado actual: 10 sana, 5 celo, 2 mastitis, 2 febril, 2 digestivo
 GPS:   campo en -34.591966, -60.887503, radio 200m
 """
 
-import logging
 import math
 import random
 from datetime import datetime, timedelta
@@ -21,7 +20,6 @@ from app.modules.health.models import HealthAnalysis
 from app.modules.reading.models import Reading
 from app.shared.enums import HealthStatus
 
-logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
 # CONFIG
@@ -295,9 +293,9 @@ class SeedService:
         end   = now + timedelta(days=FORWARD_READINGS)
         n     = int((end - start).total_seconds() / 60 // IV_MIN)
 
-        logger.info("🌱 Seed iniciado — truncando tablas...")
+        print("🌱 Seed iniciado — truncando tablas...")
         _truncate_and_reset(self.db)
-        logger.info("✓ Tablas limpias. Generando %d vacas...", len(RODEO))
+        print(f"✓ Tablas limpias. Generando {len(RODEO)} vacas...")
         random.seed(RANDOM_SEED)
 
         cows_created = collars_created = readings_created = analyses_created = 0
@@ -322,12 +320,12 @@ class SeedService:
             cow_collar_map.append((cow.id, collar.id, label))
             cows_created += 1
             collars_created += 1
-            logger.info("  [%d/%d] Vaca #%d (%s) + collar creados", row_idx + 1, len(RODEO), cow.id, label)
+            print(f"  [{row_idx + 1}/{len(RODEO)}] Vaca #{cow.id} ({label}) + collar creados")
         self.db.commit()
-        logger.info("✓ %d vacas y %d collares guardados en DB", cows_created, collars_created)
+        print(f"✓ {cows_created} vacas y {collars_created} collares guardados en DB")
 
         # Paso 2: readings
-        logger.info("📡 Generando readings (%d registros por vaca × %d vacas)...", n, len(cow_collar_map))
+        print(f"📡 Generando readings ({n} registros por vaca × {len(cow_collar_map)} vacas)...")
         for idx, (cow_id, collar_id, label) in enumerate(cow_collar_map):
             rows = _generate_readings_fast(cow_id, collar_id, label, start, n, now)
             self.db.execute(text("""
@@ -343,12 +341,12 @@ class SeedService:
                      :latitud, :longitud, :metros_recorridos, :velocidad_movimiento_prom)
             """), rows)
             readings_created += len(rows)
-            logger.info("  [%d/%d] Vaca #%d (%s) — %d readings insertados", idx + 1, len(cow_collar_map), cow_id, label, len(rows))
+            print(f"  [{idx + 1}/{len(cow_collar_map)}] Vaca #{cow_id} ({label}) — {len(rows)} readings insertados")
         self.db.commit()
-        logger.info("✓ %d readings guardados en DB", readings_created)
+        print(f"✓ {readings_created:,} readings guardados en DB")
 
         # Paso 3: health analyses
-        logger.info("🏥 Generando health analyses (%d días × 24hs × %d vacas)...", BACK_HEALTH, len(RODEO))
+        print(f"🏥 Generando health analyses ({BACK_HEALTH} días × 24hs × {len(RODEO)} vacas)...")
         for seq, (_, label) in enumerate(RODEO):
             cow_id = seq + 1
             rows = _generate_health_analyses(cow_id, label, now)
@@ -365,9 +363,9 @@ class SeedService:
                      :alert, :n_readings_used, :created_at)
             """), rows)
             analyses_created += len(rows)
-            logger.info("  [%d/%d] Vaca #%d (%s) — %d análisis insertados", seq + 1, len(RODEO), cow_id, label, len(rows))
+            print(f"  [{seq + 1}/{len(RODEO)}] Vaca #{cow_id} ({label}) — {len(rows)} análisis insertados")
         self.db.commit()
-        logger.info("✓ %d health analyses guardados en DB", analyses_created)
+        print(f"✓ {analyses_created:,} health analyses guardados en DB")
 
         return {
             "cows_created":     cows_created,
