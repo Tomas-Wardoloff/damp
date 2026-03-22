@@ -27,7 +27,7 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
     mastitis: "border-red-500/40 hover:border-red-500/80",
     febril: "border-amber-500/30 hover:border-amber-500/60",
     digestivo: "border-orange-500/30 hover:border-orange-500/60",
-    celo: "border-blue-500/30 hover:border-blue-500/60",
+    celo: "border-pink-500/30 hover:border-pink-500/60",
     "sin datos": "border-outline-variant/50 hover:border-outline-variant",
   }[normStatus] || "border-outline-variant/50 hover:border-outline-variant"
 
@@ -38,7 +38,7 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
     mastitis: "border-red-500/35 bg-red-500/10",
     febril: "border-amber-500/35 bg-amber-500/10",
     digestivo: "border-orange-500/35 bg-orange-500/10",
-    celo: "border-blue-500/35 bg-blue-500/10",
+    celo: "border-pink-500/35 bg-pink-500/10",
     "sin datos": "border-outline-variant/40 bg-surface-container-highest",
   }[normStatus] || "border-outline-variant/40 bg-surface-container-highest"
 

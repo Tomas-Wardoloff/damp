@@ -136,9 +136,9 @@ export const URGENCY_CONFIG: Record<
     icon: "✓",
   },
   low: {
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
-    border: "border-blue-500/20",
+    color: "text-pink-400",
+    bg: "bg-pink-500/10",
+    border: "border-pink-500/20",
     label: "Baja prioridad",
     icon: "!",
   },

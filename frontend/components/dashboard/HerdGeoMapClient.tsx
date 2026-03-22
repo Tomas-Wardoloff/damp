@@ -25,7 +25,7 @@ interface HerdGeoMapClientProps {
 const STATUS_COLORS: Record<string, string> = {
   SANA: "#16a34a",
   MASTITIS: "#dc2626",
-  CELO: "#60a5fa",
+  CELO: "#ec4899",
   FEBRIL: "#f59e0b",
   DIGESTIVO: "#f97316",
 };

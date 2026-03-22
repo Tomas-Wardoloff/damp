@@ -1,4 +1,5 @@
 import * as React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 export type Status = "sana" | "subclinica" | "clinica" | "mastitis" | "celo" | "febril" | "digestivo" | "sin datos" | string
@@ -10,6 +11,18 @@ interface StatusBadgeProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function StatusBadge({ status, pulse = false, className, ...props }: StatusBadgeProps) {
   const normStatus = status?.toLowerCase() as string;
+  const isCelo = normStatus === "celo"
+
+  const statusIconMap: Record<string, string> = {
+    sana: "/plus-heart-svgrepo-com.svg",
+    subclinica: "/udder-svgrepo-com.svg",
+    clinica: "/udder-svgrepo-com.svg",
+    mastitis: "/udder-svgrepo-com.svg",
+    celo: "/fire-1-svgrepo-com.svg",
+    febril: "/thermometer-svgrepo-com.svg",
+    digestivo: "/stomach-1-svgrepo-com.svg",
+    "sin datos": "/toggle-on-svgrepo-com.svg",
+  }
   
   const statusConfig: Record<string, { bg: string, dot: string }> = {
     sana: {
@@ -29,8 +42,8 @@ export function StatusBadge({ status, pulse = false, className, ...props }: Stat
       dot: "bg-red-500 vital-pulse-tertiary"
     },
     celo: {
-      bg: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-      dot: "bg-blue-400 animate-pulse"
+      bg: "bg-pink-500/20 text-pink-400 border-pink-500/30",
+      dot: "bg-pink-400 animate-pulse"
     },
     febril: {
       bg: "bg-amber-500/20 text-amber-500 border-amber-500/30",
@@ -47,23 +60,34 @@ export function StatusBadge({ status, pulse = false, className, ...props }: Stat
   }
 
   const current = statusConfig[normStatus] || statusConfig.sana
+  const statusIconSrc = statusIconMap[normStatus]
 
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 px-2.5 py-1 rounded-sm border bg-surface-container-highest",
+        "inline-flex items-center py-1.5 rounded-sm border bg-surface-container-highest",
+        isCelo ? "gap-2 px-2.5" : "gap-2.5 px-3",
         className
       )}
       {...props}
     >
       <div 
         className={cn(
-          "w-2 h-2 rounded-full",
+          "w-2.5 h-2.5 rounded-full",
           current.dot,
           !pulse && "animate-none shadow-none"
         )} 
       />
-      <span className="text-label-sm uppercase tracking-widest font-mono text-on-surface">
+      {statusIconSrc && (
+        <Image
+          src={statusIconSrc}
+          alt={`Icono ${status}`}
+          width={isCelo ? 18 : 14}
+          height={isCelo ? 18 : 14}
+          className={cn("opacity-80", isCelo && "-mx-0.5")}
+        />
+      )}
+      <span className="text-sm uppercase tracking-widest font-mono text-on-surface">
         {status}
       </span>
     </div>

@@ -76,11 +76,11 @@ export function MetricCard({
       glow: "bg-orange-500/18"
     },
     celo: {
-      text: "text-blue-400",
-      bg: "bg-blue-500/12",
-      border: "border-blue-500/35",
-      accent: "bg-blue-400",
-      glow: "bg-blue-400/18"
+      text: "text-pink-400",
+      bg: "bg-pink-500/12",
+      border: "border-pink-500/35",
+      accent: "bg-pink-400",
+      glow: "bg-pink-400/18"
     },
     sin_datos: {
       text: "text-on-surface-variant",
