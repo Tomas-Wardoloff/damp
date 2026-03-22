@@ -1,10 +1,10 @@
 """
-DAMP Seed Service — versión ajustada
-- Nombres de vacas argentinas
-- Coordenadas centradas en -34.591966, -60.887503 (±300m)
-- Movimiento máximo 90m por tick (celo: hasta ~200m)
-- GPS con movimiento visible en cada tick
-- Readings futuros coherentes con historial de health (transiciones graduales)
+DAMP Seed Service — v3
+Parámetros biológicos idénticos al generador de entrenamiento (generator.py).
+Coordenadas: campo real en -34.591966, -60.887503, radio 300m.
+Velocidad máxima: 90m/5min sana/enferma, >150m/5min celo.
+Nombres: razas lecheras argentinas reales.
+Readings futuros: progresión coherente con el historial de health.
 """
 
 import math
@@ -30,41 +30,51 @@ FORWARD_READINGS = 2.5
 BACK_HEALTH      = 7
 RANDOM_SEED      = 42
 
-# Centro del establecimiento — Alberti, Buenos Aires
-CENTER_LAT = -34.591966
-CENTER_LON = -60.887503
+# Campo real — San Antonio de Areco, Buenos Aires
+LAT_CENTRO =  -34.591966
+LON_CENTRO =  -60.887503
+RADIO_M    =   300.0        # metros máximos desde el centro
+RADIO_DEG  =   RADIO_M / 111320.0  # ~0.002696 grados
 
-# 300m en grados ~ 0.002695° lat, ~0.003268° lon (a esta latitud)
-RADIO_M    = 300          # metros, radio máximo del potrero
-LAT_PER_M  = 1 / 111320  # grados lat por metro
-LON_PER_M  = 1 / (111320 * math.cos(math.radians(CENTER_LAT)))
-
-RADIO_LAT  = RADIO_M * LAT_PER_M   # ~0.002695°
-RADIO_LON  = RADIO_M * LON_PER_M   # ~0.003268°
-
-# Velocidad → metros por tick (5 min)
-# max_vel para NO superar 90m/tick → 90m / (5min * 60s/min) * 3.6 = 1.08 km/h
-# en realidad metros = vel_km_h * (5/60) * 1000 → max vel = 90/(5/60*1000) = 1.08 km/h
-MAX_VEL_NORMAL = 1.08   # km/h → 90m/tick
-MAX_VEL_CELO   = 2.40   # km/h → ~200m/tick (celo: >150m posible)
-
-BREEDS = ["Holstein", "Jersey"]
+# Velocidad máxima en metros por tick (5 min)
+MAX_METROS_NORMAL = 90.0   # sana / enferma
+MAX_METROS_CELO   = 350.0  # celo puede moverse mucho más
 
 # ─────────────────────────────────────────────
-# PARÁMETROS FISIOLÓGICOS POR ESTADO
-# (temp_m, temp_s, hr_m, hr_s, rmssd_m, rmssd_s, vel_m, vel_s, p_rum, p_voc)
+# RAZAS LECHERAS ARGENTINAS REALES
 # ─────────────────────────────────────────────
-_PARAMS = {
-    "sana":       (38.55, 0.45,  63.0, 7.0,  41.0, 6.5,  0.60, 0.25,  0.58, 0.07),
-    "mastitis":   (40.20, 0.65,  87.0, 9.0,  18.0, 6.0,  0.22, 0.15,  0.12, 0.20),
-    "celo":       (38.70, 0.45,  72.0, 7.5,  39.0, 6.5,  1.80, 0.50,  0.55, 0.25),
-    "febril":     (39.90, 0.55,  76.0, 8.0,  33.0, 6.5,  0.45, 0.20,  0.45, 0.10),
-    "digestivo":  (39.20, 0.55,  78.0, 8.5,  28.0, 6.5,  0.28, 0.15,  0.10, 0.18),
+NOMBRES_RAZAS = [
+    "Holando Argentino",
+    "Jersey",
+    "Pardo Suizo Americano",
+    "Ayrshire",
+    "Shorthorn Lechero",
+    "Lincoln",
+    "Holando Argentino",   # la más común, se repite
+    "Jersey",
+    "Pardo Suizo Americano",
+    "Holando Argentino",
+]
+
+# ─────────────────────────────────────────────
+# PARÁMETROS BASE — idénticos al generator.py de entrenamiento
+# ─────────────────────────────────────────────
+BASE = {
+    "temp":    38.6,  "temp_s":   0.55,
+    "hr":      65.0,  "hr_s":    11.0,
+    "rmssd":   40.0,  "rmssd_s": 13.0,
+    "vel":      1.7,  "vel_s":    1.00,
+    "p_rumia": 0.52,
+    "p_vocal": 0.07,
 }
-# vel_m ahora en km/h calibrado para que metros/tick queden en rango correcto:
-# sana: 0.60 km/h → ~50m/tick   (rango normal: 20-80m)
-# celo: 1.80 km/h → ~150m/tick  (puede superar 150m)
-# enfermas: 0.22-0.45 km/h → 18-38m/tick (poco movimiento)
+
+DELTAS = {
+    "sana":      {"temp": 0.0,  "hr":  0.0,  "rmssd":   0.0,  "vel":  0.0,  "p_rumia":  0.0,  "p_vocal":  0.0,  "max_prog": 0.0},
+    "mastitis":  {"temp": +1.8, "hr": +24.0, "rmssd": -26.0,  "vel": -1.10, "p_rumia": -0.42, "p_vocal": +0.20, "max_prog": 1.0},
+    "celo":      {"temp": +0.2, "hr":  +9.0, "rmssd":  -4.0,  "vel": +2.80, "p_rumia": -0.05, "p_vocal": +0.22, "max_prog": 1.0},
+    "febril":    {"temp": +1.7, "hr": +14.0, "rmssd":  -8.0,  "vel": -0.25, "p_rumia": -0.15, "p_vocal": +0.10, "max_prog": 1.0},
+    "digestivo": {"temp": +0.8, "hr": +16.0, "rmssd": -14.0,  "vel": -0.90, "p_rumia": -0.44, "p_vocal": +0.22, "max_prog": 1.0},
+}
 
 # ─────────────────────────────────────────────
 # RODEO — 21 vacas
@@ -72,8 +82,8 @@ _PARAMS = {
 RODEO = [
     (1,  "sana"),
     (2,  "sana"),
-    (3,  "sana"),   # ex-febril
-    (4,  "sana"),   # ex-mastitis
+    (3,  "sana"),      # ex-febril: tuvo fiebre hace 5-3 días, ahora recovering
+    (4,  "sana"),      # ex-mastitis: tuvo mastitis hace 6-4 días, ahora recovering
     (5,  "sana"),
     (6,  "sana"),
     (7,  "sana"),
@@ -94,71 +104,49 @@ RODEO = [
 ]
 
 # ─────────────────────────────────────────────
-# HISTORIAL POR VACA
-# (label, desde_hours_ago, hasta_hours_ago)
+# HISTORIAL POR VACA (hours_ago desde NOW)
+# Segmentos: (label, desde_hours_ago, hasta_hours_ago)
 # ─────────────────────────────────────────────
 _HISTORIAL: dict[int, list[tuple[str, int, int]]] = {
-    1:  [("sana", 168, 0)],
-    2:  [("sana", 168, 0)],
-    # Vaca 3: tuvo fiebre hace 5 días, se recuperó — ciclo completo visible
-    3:  [("sana", 168, 132), ("febril", 132, 96), ("sana", 96, 0)],
-    # Vaca 4: tuvo mastitis hace 6 días, se recuperó — ciclo completo visible
-    4:  [("sana", 168, 144), ("mastitis", 144, 90), ("sana", 90, 0)],
-    # Vaca 5: tuvo digestivo hace 4 días, se recuperó — ciclo completo visible
-    5:  [("sana", 168, 110), ("digestivo", 110, 74), ("sana", 74, 0)],
-    # Vaca 6: tuvo fiebre leve hace 3 días, rápida recuperación
-    6:  [("sana", 168, 80),  ("febril", 80, 56),    ("sana", 56, 0)],
-    7:  [("sana", 168, 0)],
-    8:  [("sana", 168, 0)],
-    9:  [("sana", 168, 0)],
-    10: [("sana", 168, 0)],
-    11: [("sana", 168, 30),  ("celo", 30, 0)],
-    12: [("sana", 168, 20),  ("celo", 20, 0)],
-    13: [("sana", 168, 36),  ("celo", 36, 0)],
-    14: [("sana", 168, 18),  ("celo", 18, 0)],
-    15: [("sana", 168, 28),  ("celo", 28, 0)],
-    16: [("sana", 168, 72),  ("mastitis", 72, 0)],
-    17: [("sana", 168, 48),  ("mastitis", 48, 0)],
-    18: [("sana", 168, 42),  ("febril", 42, 0)],
-    19: [("sana", 168, 28),  ("febril", 28, 0)],
-    20: [("sana", 168, 60),  ("digestivo", 60, 0)],
-    21: [("sana", 168, 36),  ("digestivo", 36, 0)],
+    1:  [("sana",      168,   0)],
+    2:  [("sana",      168,   0)],
+    3:  [("sana",      168, 120), ("febril",    120,  72), ("sana",      72,   0)],
+    4:  [("sana",      168, 144), ("mastitis",  144,  96), ("sana",      96,   0)],
+    5:  [("sana",      168,   0)],
+    6:  [("sana",      168,   0)],
+    7:  [("sana",      168,   0)],
+    8:  [("sana",      168,   0)],
+    9:  [("sana",      168,   0)],
+    10: [("sana",      168,   0)],
+    11: [("sana",      168,  30), ("celo",       30,   0)],
+    12: [("sana",      168,  20), ("celo",       20,   0)],
+    13: [("sana",      168,  36), ("celo",       36,   0)],
+    14: [("sana",      168,  18), ("celo",       18,   0)],
+    15: [("sana",      168,  28), ("celo",       28,   0)],
+    16: [("sana",      168,  72), ("mastitis",   72,   0)],
+    17: [("sana",      168,  48), ("mastitis",   48,   0)],
+    18: [("sana",      168,  42), ("febril",     42,   0)],
+    19: [("sana",      168,  28), ("febril",     28,   0)],
+    20: [("sana",      168,  60), ("digestivo",  60,   0)],
+    21: [("sana",      168,  36), ("digestivo",  36,   0)],
 }
 
-# ─────────────────────────────────────────────
-# HISTORIAL "FUTURO" — qué pasa en las próximas 2.5 días
-# Define la trayectoria clínica post-"ahora" coherente con el estado actual.
-# hours_future = horas desde now (positivo = futuro)
-# ─────────────────────────────────────────────
-_HISTORIAL_FUTURO: dict[int, list[tuple[str, int, int]]] = {
-    # Vacas sanas → se mantienen sanas
-    1:  [("sana", 0, 60)],
-    2:  [("sana", 0, 60)],
-    # Vaca 3: ex-febril, ya recuperada → se mantiene sana
-    3:  [("sana", 0, 60)],
-    # Vaca 4: ex-mastitis, ya recuperada → se mantiene sana
-    4:  [("sana", 0, 60)],
-    5:  [("sana", 0, 60)],
-    6:  [("sana", 0, 60)],
-    7:  [("sana", 0, 60)],
-    8:  [("sana", 0, 60)],
-    9:  [("sana", 0, 60)],
-    10: [("sana", 0, 60)],
-    # Vacas en celo → celo dura ~30h totales, luego vuelven a sanas
-    11: [("celo", 0, 10),  ("sana", 10, 60)],
-    12: [("celo", 0, 20),  ("sana", 20, 60)],
-    13: [("celo", 0, 6),   ("sana", 6, 60)],
-    14: [("celo", 0, 22),  ("sana", 22, 60)],
-    15: [("celo", 0, 12),  ("sana", 12, 60)],
-    # Vacas con mastitis → empeoran un poco más, luego comienzan mejora gradual
-    16: [("mastitis", 0, 24), ("febril", 24, 48), ("sana", 48, 60)],
-    17: [("mastitis", 0, 18), ("febril", 18, 36), ("sana", 36, 60)],
-    # Vacas febriles → pico de fiebre, luego bajan gradualmente
-    18: [("febril", 0, 18), ("sana", 18, 60)],
-    19: [("febril", 0, 12), ("sana", 12, 60)],
-    # Vacas digestivas → empeoran, luego mejoran
-    20: [("digestivo", 0, 20), ("febril", 20, 36), ("sana", 36, 60)],
-    21: [("digestivo", 0, 14), ("febril", 14, 28), ("sana", 28, 60)],
+# Cuántas horas más se espera que dure cada condición activa
+# Usado para generar readings futuros coherentes
+_DURACION_FUTURA: dict[int, int] = {
+    3:  30,   # recovering: leve fiebre residual unas horas más
+    4:  20,   # recovering: levemente comprometida aún
+    11: 18,   # celo dura ~18hs más
+    12: 8,    # celo casi terminando
+    13: 30,   # celo activo
+    14: 6,    # celo casi terminando
+    15: 20,   # celo
+    16: 48,   # mastitis moderada, seguirá varios días
+    17: 36,   # mastitis severa
+    18: 24,   # fiebre durará ~1 día más
+    19: 16,   # fiebre casi pasando
+    20: 36,   # digestivo
+    21: 20,   # digestivo casi pasando
 }
 
 _LABEL_TO_STATUS = {
@@ -178,204 +166,177 @@ _SECONDARY_MAP = {
 }
 
 
+# ─────────────────────────────────────────────
+# HELPERS — idénticos al generator.py
+# ─────────────────────────────────────────────
+def _circ(h: float) -> float:
+    return 0.55 + 0.45 * (
+        math.exp(-0.5 * ((h - 7) / 1.5) ** 2) +
+        math.exp(-0.5 * ((h - 17) / 1.5) ** 2)
+    )
+
+def _factor_nocturno(h: float) -> float:
+    d = min(abs(h - 2), abs(h - 2 + 24), abs(h - 2 - 24))
+    return math.exp(-0.5 * (d / 2.5) ** 2)
+
+def _sigmoide(i: int, inicio: int, pendiente: float = 0.2, centro: float = 24.0) -> float:
+    h = (i - inicio) * IV_MIN / 60.0
+    return 0.0 if h <= 0 else 1 / (1 + math.exp(-pendiente * (h - centro)))
+
 def _label_at_hours_ago(cow_id: int, hours_ago: float) -> str:
     for seg_label, desde, hasta in _HISTORIAL.get(cow_id, [("sana", 999, 0)]):
         if hasta < hours_ago <= desde:
             return seg_label
     return "sana"
 
+def _label_future(cow_id: int, hours_from_now: float) -> str:
+    """
+    Qué label aplica en el futuro, dado cuántas horas desde ahora.
+    Una vez que una condición termina su duración esperada → sana.
+    Las vacas recovering (3, 4) parten de síntomas leves y se recuperan.
+    """
+    duracion = _DURACION_FUTURA.get(cow_id, 0)
+    label_actual = _label_at_hours_ago(cow_id, 0.01)  # estado actual
 
-def _label_at_hours_future(cow_id: int, hours_future: float) -> str:
-    """Label clínico para ticks en el futuro (hours_future >= 0)."""
-    for seg_label, desde, hasta in _HISTORIAL_FUTURO.get(cow_id, [("sana", 0, 999)]):
-        if desde <= hours_future < hasta:
-            return seg_label
-    return "sana"
+    if label_actual == "sana":
+        return "sana"
+
+    # Si ya pasó la duración esperada → sana
+    if hours_from_now > duracion:
+        return "sana"
+
+    # Recovering: reducen síntomas gradualmente
+    if cow_id in (3, 4):
+        return "febril" if cow_id == 3 else "mastitis"
+
+    return label_actual
 
 
-def _label_at_tick(cow_id: int, ts: datetime, now: datetime) -> str:
-    """Unifica pasado y futuro en un solo lookup."""
-    delta_hours = (now - ts).total_seconds() / 3600
-    if delta_hours >= 0:
-        return _label_at_hours_ago(cow_id, delta_hours)
+# ─────────────────────────────────────────────
+# PROGRESIÓN BIOLÓGICA POR TICK
+# Devuelve (prog, d) donde prog es 0-1 y d son los deltas de la clase
+# Para readings futuros: prog decrece si se está recuperando
+# ─────────────────────────────────────────────
+def _prog_and_delta(cow_id: int, label: str, hours_offset: float, is_future: bool):
+    """
+    hours_offset: horas desde el inicio del segmento activo
+    is_future: True si el tick es en el futuro (se aplica recuperación)
+    """
+    d = DELTAS.get(label, DELTAS["sana"])
+
+    if label == "sana":
+        return 0.0, d
+
+    if is_future:
+        duracion = _DURACION_FUTURA.get(cow_id, 24)
+        if duracion == 0:
+            return 0.0, DELTAS["sana"]
+        # Progresión decreciente: empieza en el nivel actual y baja a 0
+        t = max(0.0, 1.0 - hours_offset / duracion)
+        # Para recovering (3, 4): empiezan ya en progresión baja
+        if cow_id in (3, 4):
+            t = t * 0.35   # síntomas leves residuales
+        prog = min(t * d["max_prog"], d["max_prog"])
     else:
-        return _label_at_hours_future(cow_id, -delta_hours)
+        # Pasado: progresión completa al estado actual
+        prog = d["max_prog"] * 0.85   # estado consolidado
 
-
-def _transition_prog(ts: datetime, now: datetime, cow_id: int) -> float:
-    """
-    Factor 0-1 de 'qué tan dentro' del estado clínico actual está el tick.
-    Sirve para interpolar suavemente entre estados en los readings futuros.
-    Evita saltos bruscos en temperatura/HR al cambiar de label.
-    """
-    hours_future = (ts - now).total_seconds() / 3600
-    if hours_future <= 0:
-        return 1.0  # pasado: usa parámetros del label tal cual
-    # En futuro, transición suave sigmoide (0→1 en las primeras 3h de un nuevo estado)
-    # Buscamos hace cuántas horas empezó el segmento actual
-    cur_label = _label_at_hours_future(cow_id, hours_future)
-    # Buscar inicio del segmento
-    for seg_label, desde, hasta in _HISTORIAL_FUTURO.get(cow_id, []):
-        if seg_label == cur_label and desde <= hours_future < hasta:
-            h_in_seg = hours_future - desde
-            # sigmoid: 0 al inicio del seg, ~1 a las 3h
-            return float(1 / (1 + math.exp(-1.2 * (h_in_seg - 1.5))))
-    return 1.0
+    return prog, d
 
 
 # ─────────────────────────────────────────────
-# GENERADOR VECTORIZADO DE READINGS
+# GENERADOR VECTORIZADO DE UN SEGMENTO DE READINGS
 # ─────────────────────────────────────────────
-def _generate_readings_fast(
+def _gen_segment(
+    rng: np.random.Generator,
     cow_id: int,
     collar_id: int,
     label: str,
-    start: datetime,
-    n: int,
-    now: datetime,
+    timestamps: list,
+    hours_offsets: np.ndarray,   # horas desde inicio del segmento
+    is_future: bool,
+    lat_arr: np.ndarray,
+    lon_arr: np.ndarray,
 ) -> list[dict]:
-    rng = np.random.default_rng(RANDOM_SEED + cow_id)
+    n = len(timestamps)
+    if n == 0:
+        return []
 
-    # Timestamps y horas del día
-    timestamps = [start + timedelta(minutes=i * IV_MIN) for i in range(n)]
-    hours_f    = np.array([ts.hour + ts.minute / 60.0 for ts in timestamps])
-
-    # Factor circadiano vectorizado
-    circ_arr = 0.55 + 0.45 * (
+    hours_f = np.array([ts.hour + ts.minute / 60.0 for ts in timestamps])
+    circ_v  = 0.55 + 0.45 * (
         np.exp(-0.5 * ((hours_f - 7.0) / 1.5) ** 2) +
         np.exp(-0.5 * ((hours_f - 17.0) / 1.5) ** 2)
     )
+    fn_v = np.array([_factor_nocturno(h) for h in hours_f])
 
-    # Factor nocturno (rumia y descanso)
-    fn_night = np.exp(-0.5 * (np.minimum(
-        np.abs(hours_f - 2), np.abs(hours_f - 2 + 24)) / 2.5) ** 2)
+    # Construir prog por tick
+    progs = np.array([_prog_and_delta(cow_id, label, h, is_future)[0] for h in hours_offsets])
+    d = DELTAS.get(label, DELTAS["sana"])
 
-    # Label clínico por tick (pasado + futuro coherente)
-    tick_labels     = np.array([_label_at_tick(cow_id, ts, now) for ts in timestamps])
-    trans_progs     = np.array([_transition_prog(ts, now, cow_id) for ts in timestamps])
+    temp_m  = BASE["temp"]    + progs * d["temp"]
+    hr_m    = BASE["hr"]      + progs * d["hr"]
+    rmssd_m = BASE["rmssd"]   + progs * d["rmssd"]
+    vel_m   = BASE["vel"]     + progs * d["vel"]
+    p_rum   = BASE["p_rumia"] + progs * d["p_rumia"]
+    p_voc   = BASE["p_vocal"] + progs * d["p_vocal"]
 
-    # Parámetros base por tick
-    p_matrix = np.array([_PARAMS[l] for l in tick_labels])
-    temp_m  = p_matrix[:, 0];  temp_s  = p_matrix[:, 1]
-    hr_m    = p_matrix[:, 2];  hr_s    = p_matrix[:, 3]
-    rmssd_m = p_matrix[:, 4];  rmssd_s = p_matrix[:, 5]
-    vel_m   = p_matrix[:, 6];  vel_s   = p_matrix[:, 7]
-    p_rum   = p_matrix[:, 8];  p_voc   = p_matrix[:, 9]
+    temp_s  = BASE["temp_s"]  * (1 + 0.4 * progs)
+    hr_s    = BASE["hr_s"]    * (1 + 0.5 * progs)
+    rmssd_s = BASE["rmssd_s"] * (1 + 0.3 * progs)
+    vel_s   = BASE["vel_s"]   * (1 + 0.3 * progs)
 
-    # Suavizado en transiciones futuras: interpola desde "sana" hacia el nuevo estado
-    sana_p  = np.array(_PARAMS["sana"])
-    # Para cada tick, mezcla entre parámetros sana y parámetros del label según trans_prog
-    tp = trans_progs[:, np.newaxis]  # (n, 1)
-    p_smooth = sana_p + tp * (p_matrix - sana_p)
-    temp_m  = p_smooth[:, 0];  temp_s  = p_smooth[:, 1]
-    hr_m    = p_smooth[:, 2];  hr_s    = p_smooth[:, 3]
-    rmssd_m = p_smooth[:, 4];  rmssd_s = p_smooth[:, 5]
-    vel_m   = p_smooth[:, 6];  vel_s   = p_smooth[:, 7]
-    p_rum   = p_smooth[:, 8];  p_voc   = p_smooth[:, 9]
-
-    # Ruido correlacionado entre sensores
     rc = rng.standard_normal(n)
 
-    # Micro-eventos cross-class (~4%)
-    micro_mask  = rng.random(n) < 0.04
-    micro_type  = rng.integers(0, 4, n)
-    micro_vals  = rng.uniform(0.3, 1.1, n)
-    micro_temp  = np.where(micro_mask & (micro_type == 0), micro_vals * 0.8, 0.0)
-    micro_hr    = np.where(micro_mask & (micro_type == 1), micro_vals * 12, 0.0)
-    micro_rmssd = np.where(micro_mask & (micro_type == 2), -micro_vals * 10, 0.0)
-    micro_rmssd+= np.where(micro_mask & (micro_type == 3),  micro_vals * 8,  0.0)
+    # Temperatura con circadiano y nocturno
+    temp_circ = 0.1 * np.sin(2 * np.pi * (hours_f - 6) / 24) - fn_v * 0.25
+    temp = np.clip(rng.normal(temp_m, temp_s) + temp_circ + rc * 0.08, 36.5, 42.5).round(2)
+    temp = np.where(rng.random(n) < 0.008, 38.6, temp)
 
-    # Temperatura
-    temp_circ = 0.1 * np.sin(2 * np.pi * (hours_f - 6) / 24)
-    temp_raw  = rng.normal(temp_m, temp_s) + temp_circ + rc * 0.08 + micro_temp
-    temp      = np.clip(temp_raw, 36.5, 42.5).round(2)
-    sensor_fail = rng.random(n) < 0.008
-    temp        = np.where(sensor_fail, 38.6, temp)
+    # HR con nocturno
+    hr_circ = -fn_v * 7.0
+    hr_raw  = np.clip(rng.normal(hr_m + hr_circ, hr_s) + rc * 1.8, 38, 130)
+    hr = np.where(rng.random(n) < 0.010, rng.uniform(38, 48, n), hr_raw).round(1)
 
-    # HR
-    hr_raw  = rng.normal(hr_m, hr_s) + rc * 1.5 + micro_hr
-    artefact= rng.random(n) < 0.010
-    hr_art  = rng.uniform(38, 48, n)
-    hr      = np.where(artefact, hr_art, np.clip(hr_raw, 38, 130)).round(1)
+    # HRV con nocturno (RMSSD sube de noche)
+    rmssd_base = np.maximum(5.0, rmssd_m + fn_v * 8.0)
+    rmssd = np.maximum(4.0, rng.normal(rmssd_base, rmssd_s) - rc * 1.0).round(1)
+    sdnn  = np.maximum(rmssd * 1.05, rmssd * rng.uniform(1.1, 1.45, n)).round(1)
 
-    # HRV
-    rmssd_raw = np.maximum(4.0, rng.normal(np.maximum(5.0, rmssd_m), rmssd_s) - rc * 0.8 + micro_rmssd)
-    rmssd     = rmssd_raw.round(2)
-    sdnn      = np.maximum(rmssd * 1.05, rmssd * rng.uniform(1.1, 1.45, n)).round(2)
-
-    # Rumia — boost nocturno
-    prob_rum_adj = np.clip(
-        (rmssd_m / 40.0) * (0.5 + 0.5 * circ_arr + fn_night * 0.5) * p_rum,
-        0.02, 0.95
-    )
-    hubo_rumia = (rng.random(n) < prob_rum_adj).astype(bool)
+    # Rumia — mayor de noche
+    rum_noche = 1.0 + fn_v * 0.6
+    prob_rum  = np.clip(np.maximum(0, p_rum) * (0.5 + 0.5 * circ_v + fn_v * 0.5) * rum_noche, 0.02, 1.0)
+    hubo_rumia = (rng.random(n) < prob_rum)
 
     # Vocalización
-    prob_voc_adj = np.clip(0.07 + (temp_m - 38.6) / 2.0 * 0.20 + p_voc, 0.02, 0.95)
-    hubo_vocal   = (rng.random(n) < prob_voc_adj).astype(bool)
+    prob_voc  = np.clip(0.07 + (temp_m - 38.6) / 2.0 * 0.20 + p_voc, 0.02, 0.95)
+    hubo_vocal= (rng.random(n) < prob_voc)
 
-    # ── VELOCIDAD CALIBRADA para no superar 90m/tick (normal) o 200m/tick (celo) ──
-    is_celo   = (tick_labels == "celo")
-    # Celo nocturno: movimiento amplificado entre 22hs y 3am
-    hora_celo_factor = (
-        np.exp(-0.5 * ((hours_f - 23) / 3.0) ** 2) +
-        np.exp(-0.5 * ((hours_f -  1) / 2.5) ** 2)
-    )
-    vel_celo_boost = np.where(is_celo, 1.0 + hora_celo_factor * 0.8, 1.0)
+    # Velocidad — nocturno reduce fuertemente, celo amplifica de noche
+    if label == "celo":
+        hora_celo = (np.exp(-0.5 * ((hours_f - 23) / 3.0) ** 2) +
+                     np.exp(-0.5 * ((hours_f - 1)  / 2.5) ** 2))
+        vel_m_adj = vel_m + hora_celo * progs * 1.8
+        vel_noche = np.maximum(0.0, vel_m_adj * (1 - fn_v * 0.3))  # celo no duerme tanto
+    else:
+        vel_noche = np.maximum(0.0, vel_m * circ_v * (1 - fn_v * 0.85))
 
-    vel_base = vel_m * circ_arr * vel_celo_boost
-    vel_raw  = np.maximum(0.0, rng.normal(vel_base, vel_s))
+    vel_raw = np.maximum(0.0, rng.normal(vel_noche, vel_s * (1 - fn_v * 0.5)))
 
-    # Clip estricto por condición para garantizar límites de metros/tick
-    max_vel  = np.where(is_celo, MAX_VEL_CELO, MAX_VEL_NORMAL)
-    vel      = np.minimum(vel_raw, max_vel).round(3)
-    metros   = (vel * (IV_MIN / 60.0) * 1000.0).round(1)
-    # Garantía explícita: 90m normal, 200m celo
-    metros   = np.where(is_celo, np.minimum(metros, 200.0), np.minimum(metros, 90.0))
+    # ── Convertir vel (km/h) a metros por tick y aplicar límites ──
+    metros_raw = vel_raw * (IV_MIN / 60) * 1000
+    if label == "celo":
+        metros_clipped = np.minimum(metros_raw, MAX_METROS_CELO)
+    else:
+        metros_clipped = np.minimum(metros_raw, MAX_METROS_NORMAL)
 
-    # ── GPS — random walk dentro de ±300m del centro del establecimiento ──
-    # Cada vaca tiene su punto de partida propio dentro del potrero
-    offset_lat = rng.uniform(-RADIO_LAT * 0.5, RADIO_LAT * 0.5)
-    offset_lon = rng.uniform(-RADIO_LON * 0.5, RADIO_LON * 0.5)
-    lat0 = CENTER_LAT + offset_lat
-    lon0 = CENTER_LON + offset_lon
+    # Recalcular vel desde metros ya limitados
+    vel = (metros_clipped / ((IV_MIN / 60) * 1000)).round(2)
+    metros = metros_clipped.round(1)
 
-    # Radio por estado: enfermas se mueven menos del potrero
-    radio_lat = RADIO_LAT * {"sana": 0.8, "mastitis": 0.3, "celo": 1.0,
-                              "febril": 0.5, "digestivo": 0.3}.get(label, 0.6)
-    radio_lon = RADIO_LON * {"sana": 0.8, "mastitis": 0.3, "celo": 1.0,
-                              "febril": 0.5, "digestivo": 0.3}.get(label, 0.6)
-
-    gps_freeze     = int(rng.integers(80, 180)) if rng.random() < 0.25 else -1
-    gps_freeze_len = int(rng.integers(5, 12))
-
-    lat_arr = np.full(n, lat0)
-    lon_arr = np.full(n, lon0)
-    cur_lat, cur_lon = lat0, lon0
-
+    # GPS — actualizar lat/lon ya pasados como arrays
+    rows = []
     for i in range(n):
-        if gps_freeze > 0 and gps_freeze <= i < gps_freeze + gps_freeze_len:
-            lat_arr[i] = cur_lat
-            lon_arr[i] = cur_lon
-        else:
-            # paso en grados a partir de metros recorridos
-            # garantiza movimiento visible entre ticks
-            m_tick    = float(metros[i])
-            paso_lat  = m_tick * LAT_PER_M * rng.normal(0, 0.6)
-            paso_lon  = m_tick * LON_PER_M * rng.normal(0, 0.6)
-            # mínimo 2m de desplazamiento para que siempre haya movimiento visible
-            if abs(paso_lat) < 2 * LAT_PER_M:
-                paso_lat = float(rng.choice([-1, 1])) * 2 * LAT_PER_M * rng.uniform(0.5, 1.5)
-            if abs(paso_lon) < 2 * LON_PER_M:
-                paso_lon = float(rng.choice([-1, 1])) * 2 * LON_PER_M * rng.uniform(0.5, 1.5)
-
-            cur_lat = float(np.clip(cur_lat + paso_lat, CENTER_LAT - radio_lat, CENTER_LAT + radio_lat))
-            cur_lon = float(np.clip(cur_lon + paso_lon, CENTER_LON - radio_lon, CENTER_LON + radio_lon))
-            lat_arr[i] = cur_lat
-            lon_arr[i] = cur_lon
-
-    return [
-        {
+        rows.append({
             "timestamp":                 timestamps[i],
             "cow_id":                    cow_id,
             "collar_id":                 collar_id,
@@ -389,14 +350,128 @@ def _generate_readings_fast(
             "longitud":                  round(float(lon_arr[i]), 6),
             "metros_recorridos":         float(metros[i]),
             "velocidad_movimiento_prom": float(vel[i]),
-        }
-        for i in range(n)
-    ]
+        })
+    return rows
+
+
+def _build_gps_track(rng: np.random.Generator, label: str, metros: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Construye el track GPS completo para una vaca.
+    Parte de un punto aleatorio dentro del campo (300m del centro)
+    y hace random walk limitado a RADIO_DEG del centro.
+    """
+    n = len(metros)
+    # Punto de partida: dentro del campo pero no siempre en el centro
+    offset_lat = rng.uniform(-RADIO_DEG * 0.7, RADIO_DEG * 0.7)
+    offset_lon = rng.uniform(-RADIO_DEG * 0.7, RADIO_DEG * 0.7)
+    lat0 = LAT_CENTRO + offset_lat
+    lon0 = LON_CENTRO + offset_lon
+
+    lat_arr = np.empty(n)
+    lon_arr = np.empty(n)
+    cur_lat, cur_lon = lat0, lon0
+
+    for i in range(n):
+        m = float(metros[i])
+        if m < 0.5:
+            # Animal quieto — pequeño jitter de GPS
+            cur_lat += rng.normal(0, 0.000002)
+            cur_lon += rng.normal(0, 0.000002)
+        else:
+            paso = m / 111320.0
+            cur_lat += rng.normal(0, paso * 0.6)
+            cur_lon += rng.normal(0, paso * 0.6)
+
+        # Clip dentro del radio del campo
+        cur_lat = float(np.clip(cur_lat, LAT_CENTRO - RADIO_DEG, LAT_CENTRO + RADIO_DEG))
+        cur_lon = float(np.clip(cur_lon, LON_CENTRO - RADIO_DEG, LON_CENTRO + RADIO_DEG))
+        lat_arr[i] = cur_lat
+        lon_arr[i] = cur_lon
+
+    return lat_arr, lon_arr
 
 
 # ─────────────────────────────────────────────
-# GENERADOR DE HEALTH ANALYSES
-# Solo hacia atrás (7 días), sin cambios en la lógica original
+# GENERADOR COMPLETO DE READINGS POR VACA
+# ─────────────────────────────────────────────
+def _generate_readings_fast(
+    cow_id: int,
+    collar_id: int,
+    label: str,
+    start: datetime,
+    n: int,
+    now: datetime,
+) -> list[dict]:
+    rng = np.random.default_rng(RANDOM_SEED + cow_id)
+
+    timestamps = [start + timedelta(minutes=i * IV_MIN) for i in range(n)]
+    hours_ago  = np.array([(now - ts).total_seconds() / 3600 for ts in timestamps])
+
+    # Label fisiológico por tick
+    tick_labels = []
+    hours_offsets = []
+    for i, (ts, h_ago) in enumerate(zip(timestamps, hours_ago)):
+        if h_ago > 0:
+            # Pasado: usar historial
+            lbl = _label_at_hours_ago(cow_id, h_ago)
+            tick_labels.append(lbl)
+            # Horas desde que arrancó el segmento actual
+            hours_offsets.append(max(0.0, -h_ago))
+        else:
+            # Futuro: usar progresión futura
+            h_from_now = abs(float(h_ago))
+            lbl = _label_future(cow_id, h_from_now)
+            tick_labels.append(lbl)
+            hours_offsets.append(h_from_now)
+
+    tick_labels   = np.array(tick_labels)
+    hours_offsets = np.array(hours_offsets)
+    is_future     = hours_ago <= 0
+
+    # Generar metros primero para construir el GPS
+    # Velocidad base por tick según label
+    all_rows = []
+    n_ticks  = len(timestamps)
+
+    # Construir metros aproximados para GPS (sin ruido complejo, solo para el track)
+    vel_base_approx = np.array([
+        (BASE["vel"] + DELTAS.get(lbl, DELTAS["sana"])["vel"] * 0.8)
+        for lbl in tick_labels
+    ])
+    hours_f_approx = np.array([ts.hour + ts.minute / 60.0 for ts in timestamps])
+    circ_approx = 0.55 + 0.45 * (
+        np.exp(-0.5 * ((hours_f_approx - 7) / 1.5) ** 2) +
+        np.exp(-0.5 * ((hours_f_approx - 17) / 1.5) ** 2)
+    )
+    fn_approx = np.array([_factor_nocturno(h) for h in hours_f_approx])
+    metros_approx = np.maximum(0, vel_base_approx * circ_approx * (1 - fn_approx * 0.85)) * (IV_MIN / 60) * 1000
+
+    # Aplicar límites
+    is_celo_mask = tick_labels == "celo"
+    metros_approx = np.where(is_celo_mask,
+                              np.minimum(metros_approx, MAX_METROS_CELO),
+                              np.minimum(metros_approx, MAX_METROS_NORMAL))
+
+    lat_arr, lon_arr = _build_gps_track(rng, label, metros_approx)
+
+    # Generar sensores por segmento coherente
+    all_rows = _gen_segment(
+        rng=rng,
+        cow_id=cow_id,
+        collar_id=collar_id,
+        label=label,
+        timestamps=timestamps,
+        hours_offsets=hours_offsets,
+        is_future=is_future.any(),
+        lat_arr=lat_arr,
+        lon_arr=lon_arr,
+    )
+
+    return all_rows
+
+
+# ─────────────────────────────────────────────
+# HEALTH ANALYSES — 7 días para atrás, 1/hora
 # ─────────────────────────────────────────────
 def _generate_health_analyses(cow_id: int, label: str, now: datetime) -> list[dict]:
     rng = random.Random(cow_id * 999)
@@ -461,10 +536,8 @@ class SeedService:
         # ── Paso 1: cows + collars ──────────────────────────────
         cow_collar_map: list[tuple[int, int, str]] = []
         for row_idx, (cow_num, label) in enumerate(RODEO):
-            breed = BREEDS[row_idx % len(BREEDS)]
             cow = Cow(
-                name=breed,
-                breed=breed,
+                breed=NOMBRES_RAZAS[row_idx % len(NOMBRES_RAZAS)],
                 registration_date=datetime.utcnow(),
                 age_months=random.randint(18, 84),
             )
@@ -488,8 +561,12 @@ class SeedService:
         # ── Paso 2: readings ────────────────────────────────────
         for cow_id, collar_id, label in cow_collar_map:
             rows = _generate_readings_fast(
-                cow_id=cow_id, collar_id=collar_id,
-                label=label, start=start, n=n, now=now,
+                cow_id=cow_id,
+                collar_id=collar_id,
+                label=label,
+                start=start,
+                n=n,
+                now=now,
             )
             self.db.execute(
                 text("""
@@ -541,10 +618,9 @@ class SeedService:
             "readings_created":  readings_created,
             "analyses_created":  analyses_created,
             "message": (
-                f"Seed OK — {cows_created} vacas, {collars_created} collares, "
+                f"Seed OK — {cows_created} vacas ({', '.join(set(r[1] for r in RODEO))}), "
                 f"{readings_created:,} readings "
                 f"({BACK_READINGS}d atrás → {FORWARD_READINGS}d adelante), "
-                f"{analyses_created:,} health analyses "
-                f"({BACK_HEALTH} días, 1/hora)"
+                f"{analyses_created:,} health analyses ({BACK_HEALTH} días)"
             ),
         }
