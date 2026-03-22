@@ -32,6 +32,11 @@ Para entrenar modelos resilientes, introducimos artificialmente:
 ### Implementación Técnica
 El proceso se realiza de forma **vectorizada** utilizando **NumPy**, logrando generar historiales completos (ej. 21 vacas durante 7 días con lecturas cada 5 minutos) en menos de 5 segundos. Esta velocidad es crítica para entornos de desarrollo y pruebas de integración continua.
 
+### Análisis de Distribución de Features
+A continuación se presenta la distribución de las variables biométricas generadas según cada etiqueta de salud, validando que el motor de simulación respeta los rangos fisiológicos investigados:
+
+![Distribución de Features por Label](machine-learning/output_exploration/distribucion_features_por_label.png)
+
 ---
 
 ## Temperatura corporal
