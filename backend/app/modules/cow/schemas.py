@@ -39,3 +39,14 @@ class CowSummaryItem(BaseModel):
 class CowSummaryResponse(BaseModel):
     summary: dict[str, int]
     cows: list[CowSummaryItem]
+
+
+class CowSummaryPageResponse(BaseModel):
+    summary: dict[str, int]
+    cows: list[CowSummaryItem]
+    page: int
+    size: int
+    total: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool

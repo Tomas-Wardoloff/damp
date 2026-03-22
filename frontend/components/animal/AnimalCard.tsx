@@ -1,4 +1,5 @@
 import * as React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { StatusBadge, type Status } from "@/components/ui/StatusBadge"
 import { Activity, Thermometer, Heart, Wind } from "lucide-react"
@@ -41,13 +42,25 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
       {...props}
     >
       <div className="flex justify-between items-start">
-        <div>
+        <div className="flex items-start gap-2">
+          <div className="shrink-0 rounded-md border border-outline-variant/30 bg-surface-container-highest p-1">
+            <Image
+              src="/cow-animals-svgrepo-com.svg"
+              alt="Vaca"
+              width={20}
+              height={20}
+              className="opacity-90"
+            />
+          </div>
+
+          <div>
           <h3 className="text-base leading-tight font-display mb-0.5 text-on-surface">
             ID: #{animal.id}
           </h3>
           <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">
             {animal.breed}
           </p>
+          </div>
         </div>
         <StatusBadge status={animal.status} />
       </div>

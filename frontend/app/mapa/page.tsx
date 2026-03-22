@@ -24,9 +24,10 @@ function getRefreshSecondsFromEnv(): number {
 const STATUS_COLORS: Record<string, string> = {
   SANA: "#16a34a",
   MASTITIS: "#dc2626",
-  CELO: "#ec4899",
-  FEBRIL: "#eab308",
+  CELO: "#60a5fa",
+  FEBRIL: "#f59e0b",
   DIGESTIVO: "#f97316",
+  "SIN DATOS": "#94a3b8",
 };
 
 const STATUS_BRIEF: Record<string, string[]> = {
@@ -67,6 +68,7 @@ function formatStatusLabel(status: string): string {
     CELO: "CELO",
     FEBRIL: "FEBRIL",
     DIGESTIVO: "DIGESTIVO",
+    "SIN DATOS": "SIN DATOS",
   };
   return labels[status] || status;
 }
@@ -161,6 +163,7 @@ export default function MapaRodeoPage() {
       { key: "CELO", color: STATUS_COLORS.CELO },
       { key: "FEBRIL", color: STATUS_COLORS.FEBRIL },
       { key: "DIGESTIVO", color: STATUS_COLORS.DIGESTIVO },
+      { key: "SIN DATOS", color: STATUS_COLORS["SIN DATOS"] },
     ],
     [],
   );
@@ -221,26 +224,24 @@ export default function MapaRodeoPage() {
             <ul className="space-y-2">
               {statusLegend.map((item) => (
                 <li key={item.key} className="list-none">
-                  <details className="rounded-md border border-outline-variant/30 bg-surface-container p-2">
-                    <summary className="flex items-center gap-3 cursor-pointer list-none">
+                  <div className="rounded-md border border-outline-variant/30 bg-surface-container p-2">
+                    <div className="flex items-center gap-3">
                       <span
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: item.color }}
                       />
                       <span className="text-body-md font-medium">{formatStatusLabel(item.key)}</span>
-                    </summary>
-                    <ul className="mt-2 pl-4 list-disc space-y-1 text-label-sm text-on-surface-variant">
-                      {STATUS_BRIEF[item.key].map((detail) => (
-                        <li key={`${item.key}-${detail}`}>{detail}</li>
-                      ))}
-                    </ul>
-                  </details>
+                    </div>
+                    {item.key !== "SIN DATOS" && (
+                      <ul className="mt-2 pl-4 list-disc space-y-1 text-label-sm text-on-surface-variant">
+                        {STATUS_BRIEF[item.key].map((detail) => (
+                          <li key={`${item.key}-${detail}`}>{detail}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </li>
               ))}
-              <li className="list-none flex items-center gap-3 px-2 py-1">
-                <span className="w-3 h-3 rounded-full bg-slate-400" />
-                <span className="text-body-md">sin datos</span>
-              </li>
             </ul>
           </aside>
         </section>

@@ -5,30 +5,52 @@ import { SummaryMetrics } from "@/components/dashboard/SummaryMetrics"
 import { HerdMap } from "@/components/dashboard/HerdMap"
 import { useRouter } from "next/navigation"
 import { PageHeader } from "@/components/layout/PageHeader"
-import { fetchDashboardData } from "@/lib/api"
+import { fetchDashboardDataPaged } from "@/lib/api"
 import { type Animal } from "@/components/animal/AnimalCard"
 import { Activity } from "lucide-react"
 
 export default function Dashboard() {
+  const PAGE_SIZE = 25
   const router = useRouter()
 
   const [animals, setAnimals] = useState<Animal[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [lastFetchTime, setLastFetchTime] = useState<Date | null>(null)
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalAnimals, setTotalAnimals] = useState(0)
+  const [hasNext, setHasNext] = useState(false)
+  const [hasPrev, setHasPrev] = useState(false)
+  const [summary, setSummary] = useState<Record<string, number>>({})
 
   useEffect(() => {
     async function loadData() {
       setIsLoading(true)
       try {
-        const data = await fetchDashboardData()
+        const data = await fetchDashboardDataPaged({ page, size: PAGE_SIZE })
 
-        // As fallback for the demo if backend is empty/offline:
-        if (data.animals.length === 0) {
-          // You could load MOCK_ANIMALS here, but let's show an empty state or let the HerdMap handle it
+        if (!data) {
           setAnimals([])
-        } else {
-          setAnimals(data.animals)
+          setSummary({})
+          setTotalAnimals(0)
+          setTotalPages(0)
+          setHasNext(false)
+          setHasPrev(false)
+          return
         }
+
+        setAnimals(data.animals.length === 0 ? [] : data.animals)
+        setSummary(data.summary || {})
+        setTotalAnimals(data.total)
+        setTotalPages(data.total_pages)
+        setHasNext(data.has_next)
+        setHasPrev(data.has_prev)
+
+        if (data.total_pages > 0 && page > data.total_pages) {
+          setPage(data.total_pages)
+          return
+        }
+
         setLastFetchTime(new Date())
       } catch (err) {
         console.error(err)
@@ -41,18 +63,24 @@ export default function Dashboard() {
     // Optional: Refresh periodically
     const interval = setInterval(loadData, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [page])
 
-  const countStatus = (status: string) => animals.filter(a => a.status?.toLowerCase() === status).length;
+  const countBySummary = (status: string) => {
+    const exact = summary[status]
+    if (typeof exact === "number") return exact
+    const underscored = summary[status.replace(/\s+/g, "_")]
+    if (typeof underscored === "number") return underscored
+    return 0
+  }
 
   const metrics = {
-    total: animals.length,
-    sana: countStatus("sana"),
-    mastitis: countStatus("mastitis"),
-    celo: countStatus("celo"),
-    febril: countStatus("febril"),
-    digestivo: countStatus("digestivo"),
-    sinDatos: animals.filter(a => !a.status || a.status?.toLowerCase() === "sin datos" || a.status?.toLowerCase() === "sin_datos").length,
+    total: totalAnimals,
+    sana: countBySummary("sana"),
+    mastitis: countBySummary("mastitis") + countBySummary("subclinica") + countBySummary("clinica"),
+    celo: countBySummary("celo"),
+    febril: countBySummary("febril"),
+    digestivo: countBySummary("digestivo"),
+    sinDatos: countBySummary("sin datos"),
   }
 
   return (
@@ -76,12 +104,38 @@ export default function Dashboard() {
               <p className="font-mono text-label-md text-on-surface-variant">NO SE ENCONTRARON ANIMALES REGISTRADOS</p>
             </div>
           ) : (
-            <HerdMap
-              animals={animals}
-              lastFetchTime={lastFetchTime}
-              onAnimalClick={(id) => router.push(`/animal/${id}`)}
-              className="flex-1 min-h-0"
-            />
+            <>
+              <HerdMap
+                animals={animals}
+                lastFetchTime={lastFetchTime}
+                onAnimalClick={(id) => router.push(`/animal/${id}`)}
+                className="flex-1 min-h-0"
+              />
+
+              <div className="shrink-0 rounded-xl border border-outline-variant/30 bg-surface-container p-3 flex items-center justify-between">
+                <p className="text-label-sm text-on-surface-variant">
+                  Página {page} de {totalPages || 0} | {totalAnimals} vacas totales
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                    disabled={!hasPrev}
+                    className="rounded-md border border-outline-variant/40 bg-surface px-3 py-1.5 text-label-sm text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((prev) => prev + 1)}
+                    disabled={!hasNext}
+                    className="rounded-md border border-outline-variant/40 bg-surface px-3 py-1.5 text-label-sm text-on-surface-variant disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              </div>
+            </>
           )}
         </div>
       </div>

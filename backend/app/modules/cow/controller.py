@@ -22,3 +22,6 @@ class CowController:
 
     def get_summary(self):
         return self.service.get_summary()
+
+    def get_summary_paged(self, page: int, size: int):
+        return self.service.get_summary_paged(page=page, size=size)

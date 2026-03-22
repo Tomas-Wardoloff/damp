@@ -371,6 +371,64 @@ export async function fetchDashboardData(): Promise<{
   }
 }
 
+export async function fetchDashboardDataPaged(params?: {
+  page?: number;
+  size?: number;
+}): Promise<{
+  animals: Animal[];
+  summary: Record<string, number>;
+  page: number;
+  size: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+} | null> {
+  try {
+    const safePage = Number.isFinite(params?.page) ? Math.max(1, Math.floor(params!.page!)) : 1;
+    const safeSize = Number.isFinite(params?.size)
+      ? Math.max(1, Math.min(200, Math.floor(params!.size!)))
+      : 25;
+
+    const query = new URLSearchParams({
+      page: String(safePage),
+      size: String(safeSize),
+    });
+
+    const res = await fetchWithRetry(`${API_BASE_URL}/cows/summary/paged?${query.toString()}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      console.error("Failed to fetch paged dashboard data:", res.status);
+      return null;
+    }
+
+    const data = await res.json();
+    const animals = (data.cows || []).map((cow: any) => ({
+      ...cow,
+      rawLastUpdated: cow.lastUpdated,
+      lastUpdated: formatApiDateTime(cow.lastUpdated),
+    }));
+
+    return {
+      animals,
+      summary: data.summary || {},
+      page: Number(data.page) || safePage,
+      size: Number(data.size) || safeSize,
+      total: Number(data.total) || 0,
+      total_pages: Number(data.total_pages) || 0,
+      has_next: Boolean(data.has_next),
+      has_prev: Boolean(data.has_prev),
+    };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return null;
+    }
+    console.error("Failed to fetch paged dashboard data:", err);
+    return null;
+  }
+}
+
 export async function fetchAnimalDetail(idString: string) {
   const cowId = parseInt(idString.replace(/\D/g, ""), 10);
   if (isNaN(cowId)) return null;
