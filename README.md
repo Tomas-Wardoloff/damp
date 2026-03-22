@@ -23,7 +23,7 @@ Ubicado en [machine-learning/](machine-learning/), es el servicio especializado 
 
 ## Estrategia de Datos y Funcionamiento Inicial
 
-Para que el sistema sea funcional desde el primer momento ("Funcionamiento Inicial"), el proyecto implementa una robusta estrategia de generación de datos sintéticos basada en investigación real:
+Para que el sistema sea funcional desde el primer momento, el proyecto implementa una robusta estrategia de generación de datos sintéticos basada en investigación real:
 
 1.  **Contexto del Problema y Sensores:** La infraestructura del proyecto está diseñada bajo la premisa de que **cada animal posee un collar con sensores multibiométricos** que envían datos de forma continua cada **5 minutos**. Ante la ausencia de un dataset público que cumpliera estrictamente con este requisito de alta frecuencia y diversidad de sensores, se optó por una sofisticada técnica de simulación.
 2.  **Premisas de Investigación:** La base científica y la obtención de los datos originales se detallan en el documento [Research.md](Research.md).
