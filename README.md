@@ -1,4 +1,12 @@
-# damp
+# DAMP
+
+[![Acceder al Aplicativo](https://img.shields.io/badge/Acceder_al_Aplicativo-Vercel-black?style=for-the-badge&logo=vercel)](https://damp-front.vercel.app/)
+
+## Introducción
+**DAMP (Distributed Animal Monitoring Platform)** es una plataforma avanzada de monitoreo biométrico diseñada para el sector ganadero. Utiliza sensores de alta frecuencia (collares inteligentes) y modelos de Machine Learning para detectar enfermedades y cambios fisiológicos.
+
+---
+
 ## Arquitectura del Proyecto
 
 El proyecto está diseñado como una plataforma integral de monitoreo de salud animal, compuesta por tres servicios principales que interactúan entre sí:
