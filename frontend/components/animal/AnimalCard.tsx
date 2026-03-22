@@ -31,6 +31,17 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
     "sin datos": "border-outline-variant/50 hover:border-outline-variant",
   }[normStatus] || "border-outline-variant/50 hover:border-outline-variant"
 
+  const statusIconWrapColor = {
+    sana: "border-primary/35 bg-primary/10",
+    subclinica: "border-amber-500/35 bg-amber-500/10",
+    clinica: "border-red-500/35 bg-red-500/10",
+    mastitis: "border-red-500/35 bg-red-500/10",
+    febril: "border-amber-500/35 bg-amber-500/10",
+    digestivo: "border-orange-500/35 bg-orange-500/10",
+    celo: "border-blue-500/35 bg-blue-500/10",
+    "sin datos": "border-outline-variant/40 bg-surface-container-highest",
+  }[normStatus] || "border-outline-variant/40 bg-surface-container-highest"
+
   return (
     <div
       className={cn(
@@ -41,48 +52,50 @@ export function AnimalCard({ animal, className, ...props }: AnimalCardProps) {
       )}
       {...props}
     >
-      <div className="flex justify-between items-start">
-        <div className="flex items-start gap-2">
-          <div className="shrink-0 rounded-md border border-outline-variant/30 bg-surface-container-highest p-1">
-            <Image
-              src="/cow-animals-svgrepo-com.svg"
-              alt="Vaca"
-              width={20}
-              height={20}
-              className="opacity-90"
-            />
-          </div>
-
-          <div>
+      <div className="flex justify-between items-start gap-3">
+        <div className="min-w-0">
           <h3 className="text-base leading-tight font-display mb-0.5 text-on-surface">
             ID: #{animal.id}
           </h3>
           <p className="text-label-sm text-on-surface-variant uppercase tracking-wider">
             {animal.breed}
           </p>
-          </div>
         </div>
         <StatusBadge status={animal.status} />
       </div>
 
-      <div className="mt-2 grid grid-cols-2 gap-2 gap-y-3">
-        <div className="flex items-center gap-2">
-          <Thermometer className="w-4 h-4 text-on-surface-variant group-hover:text-secondary drop-shadow-sm transition-colors" />
-          <span className="text-body-md whitespace-nowrap">
-            {typeof animal.temperature === 'number' ? animal.temperature.toFixed(1) : animal.temperature}°C
-          </span>
+      <div className="mt-2 grid grid-cols-[1fr_auto] gap-3 items-center">
+        <div className="grid grid-cols-2 gap-2 gap-y-3 min-w-0">
+          <div className="flex items-center gap-2">
+            <Thermometer className="w-4 h-4 text-on-surface-variant group-hover:text-secondary drop-shadow-sm transition-colors" />
+            <span className="text-body-md whitespace-nowrap">
+              {typeof animal.temperature === 'number' ? animal.temperature.toFixed(1) : animal.temperature}°C
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Heart className="w-4 h-4 text-on-surface-variant group-hover:text-tertiary drop-shadow-sm transition-colors" />
+            <span className="text-body-md whitespace-nowrap">{animal.heartRate} bpm</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Wind className="w-4 h-4 text-on-surface-variant group-hover:text-primary drop-shadow-sm transition-colors" />
+            <span className="text-body-md whitespace-nowrap">{animal.distance} m</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Activity className="w-4 h-4 text-on-surface-variant group-hover:text-primary drop-shadow-sm opacity-80 transition-colors" />
+            <span className="text-body-md text-primary">Normal</span>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Heart className="w-4 h-4 text-on-surface-variant group-hover:text-tertiary drop-shadow-sm transition-colors" />
-          <span className="text-body-md whitespace-nowrap">{animal.heartRate} bpm</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Wind className="w-4 h-4 text-on-surface-variant group-hover:text-primary drop-shadow-sm transition-colors" />
-          <span className="text-body-md whitespace-nowrap">{animal.distance} m</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-on-surface-variant group-hover:text-primary drop-shadow-sm opacity-80 transition-colors" />
-          <span className="text-body-md text-primary">Normal</span>
+
+        <div className="flex items-center justify-center pr-0.5">
+          <div className={cn("shrink-0 rounded-lg border p-2", statusIconWrapColor)}>
+            <Image
+              src="/cow-animals-svgrepo-com.svg"
+              alt="Vaca"
+              width={32}
+              height={32}
+              className="opacity-95"
+            />
+          </div>
         </div>
       </div>
 

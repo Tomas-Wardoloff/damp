@@ -1,4 +1,5 @@
 import * as React from "react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 export type MetricStatus = "neutral" | "sana" | "subclinica" | "clinica" | "mastitis" | "celo" | "febril" | "digestivo" | "sin_datos"
@@ -8,9 +9,22 @@ export interface MetricCardProps extends React.HTMLAttributes<HTMLDivElement> {
   value: number | string
   subtitle: string
   status?: MetricStatus
+  iconSrc?: string
+  iconAlt?: string
+  iconClassName?: string
 }
 
-export function MetricCard({ title, value, subtitle, status = "neutral", className, ...props }: MetricCardProps) {
+export function MetricCard({
+  title,
+  value,
+  subtitle,
+  status = "neutral",
+  iconSrc,
+  iconAlt = "Icono",
+  iconClassName,
+  className,
+  ...props
+}: MetricCardProps) {
   const statusStyles: Record<MetricStatus, { text: string; bg: string; border: string; accent: string; glow: string | null }> = {
     neutral: {
       text: "text-on-surface",
@@ -96,8 +110,24 @@ export function MetricCard({ title, value, subtitle, status = "neutral", classNa
       </h4>
 
       <div className="flex flex-col gap-1 md:gap-2 mt-auto">
-        <div className={cn("text-3xl sm:text-4xl lg:text-5xl leading-none font-display font-bold tracking-tight", style.text)}>
-          {value}
+        <div className="flex items-center justify-between gap-3">
+          <div className={cn("text-3xl sm:text-4xl lg:text-5xl leading-none font-display font-bold tracking-tight", style.text)}>
+            {value}
+          </div>
+          {iconSrc && (
+            <div className="w-17 h-17 shrink-0 -translate-x-1 flex items-center justify-center pointer-events-none">
+              <Image
+                src={iconSrc}
+                alt={iconAlt}
+                width={68}
+                height={68}
+                className={cn(
+                  "opacity-55 brightness-0 invert object-contain",
+                  iconClassName,
+                )}
+              />
+            </div>
+          )}
         </div>
         <p className="text-label-sm md:text-body-md text-on-surface-variant">
           {subtitle}
