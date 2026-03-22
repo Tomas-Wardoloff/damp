@@ -1,5 +1,8 @@
 # DAMP
 
+> [!IMPORTANT]  
+> This project uses free services such as **Neon DB**, **Render**, and **Vercel** for its deployment. Consequently, the application's performance may be affected by the limitations of these providers (such as backend "cold starts" or database suspension), which can lead to uncontrolled issues regarding the system's initial performance.
+
 [![Access the Application](https://img.shields.io/badge/Access_the_Application-Vercel-black?style=for-the-badge&logo=vercel)](https://damp-front.vercel.app/)
 
 ## Demo
